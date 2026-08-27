@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Command-line interface for QGIS News Gatherer."""
 
 import asyncio
@@ -12,6 +16,7 @@ from qgis_news_gatherer import __version__
 from qgis_news_gatherer.collectors.base import BaseCollector
 from qgis_news_gatherer.collectors.changelog import ChangelogCollector
 from qgis_news_gatherer.collectors.conferences import ConferencesCollector
+from qgis_news_gatherer.collectors.discourse import DiscourseCollector
 from qgis_news_gatherer.collectors.feeds import BlogFeedCollector, NewsFeedCollector
 from qgis_news_gatherer.collectors.github import (
     DiscussionsCollector,
@@ -22,10 +27,18 @@ from qgis_news_gatherer.collectors.github import (
     WebsiteUpdatesCollector,
 )
 from qgis_news_gatherer.collectors.analytics import AnalyticsCollector, PluginStatsCollector
-from qgis_news_gatherer.collectors.mailing_lists import MailingListsCollector
+from qgis_news_gatherer.collectors.mailing_lists import (
+    DeveloperMailingListsCollector,
+    MailingListsCollector,
+)
 from qgis_news_gatherer.collectors.members import SustainingMembersCollector
-from qgis_news_gatherer.collectors.social import MastodonCollector, PlanetCollector, YouTubeCollector
+from qgis_news_gatherer.collectors.psc import PSCMinutesCollector
+from qgis_news_gatherer.collectors.social import MastodonCollector, PlanetCollector
 from qgis_news_gatherer.collectors.transifex import TranslationsCollector
+from qgis_news_gatherer.collectors.youtube import (
+    YouTubeShortsCollector,
+    YouTubeVideosCollector,
+)
 from qgis_news_gatherer.collectors.user_groups import UserGroupsCollector
 from qgis_news_gatherer.config import ReportConfig
 from qgis_news_gatherer.report import ShowNotesGenerator
@@ -43,16 +56,20 @@ COLLECTORS: dict[str, type[BaseCollector]] = {
     "website_updates": WebsiteUpdatesCollector,
     "discussions": DiscussionsCollector,
     "conferences": ConferencesCollector,
-    "mailing_lists": MailingListsCollector,
+    "mailing_lists_user": MailingListsCollector,
+    "mailing_lists_developer": DeveloperMailingListsCollector,
     "translations": TranslationsCollector,
     "user_groups": UserGroupsCollector,
     "sustaining_members": SustainingMembersCollector,
     "analytics": AnalyticsCollector,
     "plugin_stats": PluginStatsCollector,
     "changelog": ChangelogCollector,
-    "youtube": YouTubeCollector,
+    "youtube": YouTubeVideosCollector,
+    "youtube_shorts": YouTubeShortsCollector,
     "mastodon": MastodonCollector,
     "planet": PlanetCollector,
+    "psc_minutes": PSCMinutesCollector,
+    "discourse": DiscourseCollector,
 }
 
 

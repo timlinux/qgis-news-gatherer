@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Configuration management for QGIS News Gatherer."""
 
 from datetime import date
@@ -89,6 +93,39 @@ class Settings(BaseSettings):
         description="feed.qgis.org JSON URL",
     )
 
+    # YouTube settings
+    youtube_search_url: str = Field(
+        default="https://www.youtube.com/results",
+        description="YouTube search results URL",
+    )
+    youtube_search_filter: str = Field(
+        default="EgIIBA%3D%3D",
+        description=(
+            "YouTube search 'sp' filter. The default restricts results to "
+            "uploads from this month, with no video/short type filter."
+        ),
+    )
+    youtube_search_queries: list[str] = Field(
+        default=["QGIS", "QGIS tutorial"],
+        description="Search terms used to find QGIS videos",
+    )
+    youtube_shorts_search_queries: list[str] = Field(
+        default=["QGIS shorts", "QGIS"],
+        description="Search terms used to find QGIS Shorts",
+    )
+    youtube_max_videos: int = Field(
+        default=8,
+        description="Maximum long form videos to include in the report",
+    )
+    youtube_max_shorts: int = Field(
+        default=8,
+        description="Maximum Shorts to include in the report",
+    )
+    youtube_highlight_count: int = Field(
+        default=3,
+        description="Number of top-viewed items highlighted per YouTube section",
+    )
+
     # Other URLs
     changelog_url: str = Field(
         default="https://changelog.qgis.org/en/qgis/",
@@ -145,12 +182,15 @@ class ReportConfig:
             "planet",
             "website_updates",
             "qeps",
-            "mailing_lists",
+            "mailing_lists_user",
+            "mailing_lists_developer",
+            "discourse",
             "user_groups",
             "sustaining_members",
             "analytics",
             "plugin_stats",
             "youtube",
+            "youtube_shorts",
             "mastodon",
             "psc_minutes",
             "translations",
@@ -162,7 +202,7 @@ class ReportConfig:
         """Return available sections with descriptions."""
         return {
             "releases": "QGIS releases and changelog",
-            "notable_fixes": "Notable bug fixes from merged PRs",
+            "notable_fixes": "All merged pull requests for the month",
             "merged_prs": "Key merged pull requests (features, improvements)",
             "grant_proposals": "Grant program updates",
             "conferences": "Conference and event announcements",
@@ -170,13 +210,16 @@ class ReportConfig:
             "blog_posts": "Posts from blog.qgis.org",
             "website_updates": "QGIS website repository changes",
             "qeps": "QGIS Enhancement Proposals",
-            "mailing_lists": "Mailing list highlights",
+            "mailing_lists_user": "QGIS Users mailing list threads",
+            "mailing_lists_developer": "QGIS Developer mailing list threads",
+            "discourse": "OSGeo Discourse QGIS-category threads",
             "user_groups": "User group updates, new groups, and activities",
             "sustaining_members": "New and current sustaining members",
             "analytics": "QGIS usage analytics from feed.qgis.org",
             "plugin_stats": "Plugin download statistics from plugins.qgis.org",
             "planet": "Community blog posts from Planet QGIS",
-            "youtube": "QGIS-related YouTube videos",
+            "youtube": "QGIS-related YouTube videos published this month",
+            "youtube_shorts": "QGIS-related YouTube Shorts published this month",
             "mastodon": "Top QGIS mentions on Mastodon",
             "psc_minutes": "Project Steering Committee minutes",
             "translations": "Translation statistics",

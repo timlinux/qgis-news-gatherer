@@ -1,4 +1,11 @@
-"""Collectors for YouTube, Mastodon, and Planet QGIS blog posts."""
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""Collectors for Mastodon posts and Planet QGIS blog posts.
+
+YouTube collection lives in :mod:`qgis_news_gatherer.collectors.youtube`.
+"""
 
 import re
 from datetime import datetime
@@ -6,125 +13,12 @@ from time import mktime
 
 import feedparser
 
-from qgis_news_gatherer.collectors.base import BaseCollector, CollectorResult, NewsItem
-from qgis_news_gatherer.config import settings
-
-
-class YouTubeCollector(BaseCollector):
-    """Collect QGIS-related YouTube videos published this month."""
-
-    section_name = "youtube"
-    section_title = "QGIS on YouTube"
-
-    async def collect(self) -> CollectorResult:
-        """Search YouTube for recent QGIS videos."""
-        self.log_verbose("Searching YouTube for QGIS videos...")
-
-        # YouTube search sorted by upload date, filtered to videos only
-        # sp=CAISBAgCEAE= means sort by upload date, filter to videos
-        url = (
-            "https://www.youtube.com/results"
-            "?search_query=QGIS"
-            "&sp=CAISBAgCEAE%3D"
-        )
-        response = await self.client.get(
-            url,
-            headers={
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-        )
-        response.raise_for_status()
-
-        items: list[NewsItem] = []
-        warnings: list[str] = []
-
-        match = re.search(r"ytInitialData\s*=\s*(\{.*?\});", response.text)
-        if not match:
-            warnings.append("Could not parse YouTube search results")
-            return CollectorResult(
-                section_name=self.section_name,
-                section_title=self.section_title,
-                items=items,
-                warnings=warnings,
-            )
-
-        import json
-        data = json.loads(match.group(1))
-        contents = (
-            data.get("contents", {})
-            .get("twoColumnSearchResultsRenderer", {})
-            .get("primaryContents", {})
-            .get("sectionListRenderer", {})
-            .get("contents", [])
-        )
-
-        for section in contents:
-            for item in section.get("itemSectionRenderer", {}).get("contents", []):
-                vid = item.get("videoRenderer", {})
-                if not vid:
-                    continue
-
-                title = vid.get("title", {}).get("runs", [{}])[0].get("text", "")
-                vid_id = vid.get("videoId", "")
-                pub_text = vid.get("publishedTimeText", {}).get("simpleText", "")
-                views_text = vid.get("viewCountText", {}).get("simpleText", "")
-                channel = vid.get("ownerText", {}).get("runs", [{}])[0].get("text", "")
-
-                if not vid_id or not title:
-                    continue
-
-                # Filter: only include videos from roughly this month
-                # pub_text is like "2 days ago", "1 week ago", "3 weeks ago", "1 month ago"
-                # We include anything up to ~5 weeks old
-                if any(x in pub_text.lower() for x in ["month", "year"]):
-                    num = re.search(r"(\d+)", pub_text)
-                    if num and int(num.group(1)) > 1:
-                        continue
-
-                video_url = f"https://www.youtube.com/watch?v={vid_id}"
-
-                # Parse view count for engagement sorting
-                view_count = 0
-                if views_text:
-                    num_match = re.search(r"([\d,]+)", views_text.replace(",", ""))
-                    if num_match:
-                        try:
-                            view_count = int(num_match.group(1).replace(",", ""))
-                        except ValueError:
-                            pass
-
-                items.append(
-                    NewsItem(
-                        title=title,
-                        url=video_url,
-                        description=f"by {channel} | {views_text} | {pub_text}",
-                        author=channel,
-                        category="YouTube",
-                        metadata={
-                            "video_id": vid_id,
-                            "views": view_count,
-                            "published_text": pub_text,
-                            "channel": channel,
-                        },
-                    )
-                )
-
-                if len(items) >= 10:
-                    break
-            if len(items) >= 10:
-                break
-
-        # Sort by view count (highest engagement first)
-        items.sort(key=lambda x: x.metadata.get("views", 0), reverse=True)
-
-        self.log_verbose(f"Found {len(items)} YouTube videos")
-        return CollectorResult(
-            section_name=self.section_name,
-            section_title=self.section_title,
-            items=items,
-            warnings=warnings,
-        )
+from qgis_news_gatherer.collectors.base import (
+    BaseCollector,
+    CollectorResult,
+    NewsItem,
+    strip_emoji,
+)
 
 
 class MastodonCollector(BaseCollector):
@@ -187,9 +81,12 @@ class MastodonCollector(BaseCollector):
                     replies = post.get("replies_count", 0)
                     engagement = boosts + favs + replies
 
-                    # Strip HTML from content for description
+                    # Strip HTML and color-emoji glyphs from content. Color
+                    # emoji are pulled from Noto Color Emoji at full glyph
+                    # size and break the inline card layout.
                     content = re.sub(r"<[^>]+>", "", post.get("content", ""))
-                    content = content[:200]
+                    content = strip_emoji(content)
+                    content = re.sub(r"\s+", " ", content).strip()[:200]
 
                     all_posts.append(
                         NewsItem(
@@ -217,13 +114,15 @@ class MastodonCollector(BaseCollector):
         )
         items = all_posts[:5]
 
-        # Enrich descriptions with engagement stats
+        # Enrich descriptions with engagement stats. Plain text only \u2014
+        # rendered inline with body type, color-emoji glyphs blow up to
+        # full size and break the card layout.
         for item in items:
             meta = item.metadata
             stats = (
-                f"\u2764 {meta.get('favourites', 0)} "
-                f"\U0001f501 {meta.get('boosts', 0)} "
-                f"\U0001f4ac {meta.get('replies', 0)}"
+                f"{meta.get('favourites', 0)} favs \u00b7 "
+                f"{meta.get('boosts', 0)} boosts \u00b7 "
+                f"{meta.get('replies', 0)} replies"
             )
             item.description = f"{stats} | {item.description}"
 

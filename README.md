@@ -34,6 +34,8 @@ QGIS News Gatherer is a Python CLI tool that automates gathering content for the
 | Mailing Lists | Highlights from qgis-user list |
 | Translations | Transifex statistics |
 | Discussions | GitHub Discussions |
+| QGIS on YouTube | Long form QGIS videos published this month |
+| QGIS Shorts | QGIS Shorts published this month |
 
 ## Installation
 
@@ -178,4 +180,4 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ---
 
-Made with :heart: by [Kartoza](https://kartoza.com) | [Donate!](https://github.com/sponsors/kartoza) | [GitHub](https://github.com/kartoza/qgis-news-gatherer)
+Made with :heart: by [Kartoza](https://kartoza.com) | [Donate!](https://github.com/sponsors/kartoza) | [GitHub](https://github.com/timlinux/qgis-news-gatherer)

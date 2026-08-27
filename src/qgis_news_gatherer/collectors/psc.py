@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Collector for QGIS Project Steering Committee meeting minutes."""
 
 from __future__ import annotations

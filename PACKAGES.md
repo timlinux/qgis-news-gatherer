@@ -94,6 +94,8 @@ qgis_news_gatherer/
     ├── conferences.py   # Conference info collector
     ├── mailing_lists.py # OSGeo mailing list archives
     ├── transifex.py     # Translation statistics
+    ├── social.py        # Mastodon and Planet QGIS collectors
+    ├── youtube.py       # YouTube video and Shorts collectors
     └── analytics.py     # Download statistics
 ```
 

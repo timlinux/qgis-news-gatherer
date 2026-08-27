@@ -111,6 +111,8 @@ QGIS News Gatherer is a Python CLI tool that automates the collection of content
 - **FR-001.8**: Collect mailing list highlights
 - **FR-001.9**: Collect translation statistics from Transifex
 - **FR-001.10**: Collect GitHub Discussions highlights
+- **FR-001.11**: Collect QGIS-related YouTube videos published in the month
+- **FR-001.12**: Collect QGIS-related YouTube Shorts published in the month
 
 ### FR-002: Date Filtering
 - **FR-002.1**: Default to current calendar month
@@ -128,6 +130,9 @@ QGIS News Gatherer is a Python CLI tool that automates the collection of content
 - **FR-003.8**: Generate HTML for web viewing
 - **FR-003.9**: Calculate video chapter timestamps
 - **FR-003.10**: Collect and deduplicate all links
+- **FR-003.11**: Render YouTube sections as badged video cards with an
+  infographic: stat tiles (count, tutorials, combined views, change vs
+  last month) and a month-on-month grouped bar chart
 
 ### FR-004: Error Handling
 - **FR-004.1**: Continue collection if individual sources fail
@@ -254,6 +259,28 @@ class CollectorResult:
 
 ### 7.3 JSON Feeds
 - `https://feed.qgis.org/sketches/sketches.json` - News Feed
+
+### 7.4 YouTube
+
+YouTube offers no key-less search API, so the collectors parse the
+`ytInitialData` JSON embedded in the search results page:
+
+- `https://www.youtube.com/results?search_query={query}&sp=EgIIBA%3D%3D`
+
+The `sp` filter restricts results to uploads from the current month and
+applies no type filter, so long form videos and Shorts are both returned.
+Results are read from the `videoRenderer`, `reelItemRenderer` and
+`shortsLockupViewModel` nodes wherever they appear in the document.
+
+Known limitations:
+
+- Long form results carry a relative upload date ("3 days ago") which is
+  resolved to an approximate date. Shorts carry no date at all, so they are
+  only included when the report targets the current month.
+- Because YouTube only reports the current month, month-on-month comparison
+  is built from counts each run records in
+  `{cache_dir}/youtube_history.json`. Comparisons therefore start from the
+  first month the tool is run.
 
 ## 8. CLI Interface
 

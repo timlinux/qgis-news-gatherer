@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Report and show notes generation for QGIS news."""
 
 import json
@@ -13,7 +17,7 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from qgis_news_gatherer.charts import generate_analytics_charts
+from qgis_news_gatherer.charts import fmt_number, generate_analytics_charts
 from qgis_news_gatherer.collectors.base import CollectorResult, NewsItem
 
 
@@ -65,13 +69,13 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
                 content: "QGIS Monthly News - {{ month_str }}";
                 font-size: 7pt;
                 color: #aaa;
-                font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', sans-serif;
+                font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans CJK JP', 'Noto Sans CJK SC', 'Noto Sans CJK KR', 'Noto Color Emoji', sans-serif;
             }
             @bottom-right {
                 content: "Made with love by Kartoza";
                 font-size: 7pt;
                 color: #aaa;
-                font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', sans-serif;
+                font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'Noto Sans CJK JP', 'Noto Sans CJK SC', 'Noto Sans CJK KR', 'Noto Color Emoji', sans-serif;
             }
         }
 
@@ -90,7 +94,7 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
         * { box-sizing: border-box; }
 
         body {
-            font-family: BlinkMacSystemFont, -apple-system, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+            font-family: BlinkMacSystemFont, -apple-system, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', 'Helvetica', 'Arial', 'Noto Sans CJK JP', 'Noto Sans CJK SC', 'Noto Sans CJK KR', 'Noto Color Emoji', sans-serif;
             line-height: 1.5;
             color: #2d2d2d;
             margin: 0;
@@ -366,6 +370,133 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
             word-break: break-word;
         }
 
+        /* --- VIDEO / SHORTS CARDS --- */
+        .video-stats {
+            display: flex;
+            gap: 8px;
+            margin: 8px 0 12px;
+        }
+
+        .video-stat {
+            flex: 1;
+            background: #f0f7e6;
+            border: 1px solid #dde8cc;
+            border-radius: 6px;
+            padding: 8px 6px;
+            text-align: center;
+        }
+
+        .video-stat-number {
+            font-size: 15pt;
+            font-weight: 700;
+            color: #3d7a1c;
+            line-height: 1.1;
+        }
+
+        .video-stat-label {
+            font-size: 7.5pt;
+            color: #666;
+            margin-top: 2px;
+        }
+
+        .video-chart {
+            text-align: center;
+            margin: 0 auto 4px;
+        }
+
+        .video-chart svg {
+            width: auto;
+            max-width: 14.5cm;
+            max-height: 7.5cm;
+            height: auto;
+        }
+
+        .video-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 10px 0;
+        }
+
+        .video-card {
+            background: #fafbf8;
+            border: 1px solid #dde8cc;
+            border-radius: 6px;
+            padding: 8px 12px;
+            width: calc(50% - 4px);
+            break-inside: avoid;
+        }
+
+        .video-card-featured {
+            background: #f0f7e6;
+            border-color: #93b023;
+            border-left: 3px solid #589632;
+        }
+
+        .video-card-head {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .video-badge {
+            font-size: 6.5pt;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: white;
+            background: #589632;
+            border-radius: 3px;
+            padding: 2px 6px;
+        }
+
+        .video-badge-short {
+            background: #c0392b;
+        }
+
+        .video-tag {
+            font-size: 6.5pt;
+            font-weight: 600;
+            color: #3d7a1c;
+            background: #e6f2d6;
+            border-radius: 3px;
+            padding: 2px 6px;
+        }
+
+        .video-tag-featured {
+            color: #8a6d00;
+            background: #fbf0c4;
+        }
+
+        .video-duration {
+            font-family: 'Courier New', monospace;
+            font-size: 7pt;
+            color: #666;
+        }
+
+        .video-card-title {
+            font-weight: 600;
+            font-size: 9pt;
+            line-height: 1.3;
+            color: #2d2d2d;
+            overflow-wrap: break-word;
+            word-break: break-word;
+        }
+
+        .video-card-title a {
+            color: #3d7a1c;
+            text-decoration: underline;
+            text-decoration-color: #b5d88c;
+            text-underline-offset: 2px;
+        }
+
+        .video-card-meta {
+            font-size: 7.5pt;
+            color: #999;
+            margin-top: 3px;
+        }
+
         /* --- COMPACT LIST --- */
         .compact-list {
             column-count: 3;
@@ -465,6 +596,70 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
             flex-shrink: 0;
         }
 
+        .discourse-banner {
+            display: flex;
+            align-items: stretch;
+            gap: 18px;
+            background: linear-gradient(120deg, #589632 0%, #3d7a1c 70%, #2f5e15 100%);
+            color: #fff;
+            border-radius: 10px;
+            padding: 16px 22px;
+            margin-bottom: 14px;
+            text-decoration: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
+
+        .discourse-banner-icon {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 6px 14px;
+            font-weight: 800;
+            font-size: 16pt;
+            line-height: 1;
+            color: #fff;
+            letter-spacing: 1px;
+        }
+
+        .discourse-banner-icon span {
+            font-size: 7pt;
+            letter-spacing: 2px;
+            font-weight: 600;
+            margin-top: 4px;
+            opacity: 0.85;
+        }
+
+        .discourse-banner-body {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .discourse-banner-title {
+            font-size: 13pt;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .discourse-banner-meta {
+            font-size: 8pt;
+            opacity: 0.85;
+            margin-top: 3px;
+        }
+
+        .group-icon {
+            font-size: 14pt;
+            line-height: 1;
+            width: 36px;
+            height: 36px;
+            overflow: hidden;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
         .member-info { flex: 1; min-width: 0; }
 
         .member-name {
@@ -513,7 +708,9 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         .chart-single .chart-wrapper svg {
-            width: 100%;
+            max-width: 100%;
+            max-height: 16cm;
+            width: auto;
             height: auto;
         }
 
@@ -546,7 +743,8 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
             word-break: break-all;
         }
 
-        .news-item, .compact-item, .qep-card, .member-card, .link-item {
+        .news-item, .compact-item, .qep-card, .member-card, .link-item,
+        .video-card {
             max-width: 100%;
             overflow: hidden;
         }
@@ -684,7 +882,41 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="warning">{{ warning }}</div>
         {% endfor %}
 
-        {% if section.has_charts %}
+        {% if section.is_video %}
+        {% if section.stats %}
+        <div class="video-stats">
+            {% for stat in section.stats %}
+            <div class="video-stat">
+                <div class="video-stat-number">{{ stat.value }}</div>
+                <div class="video-stat-label">{{ stat.label }}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% for svg in section.chart_svgs %}
+        <div class="video-chart">{{ svg }}</div>
+        {% endfor %}
+        <div class="video-grid">
+            {% for item in section.news_items %}
+            <div class="video-card{% if item.highlight %} video-card-featured{% endif %}">
+                <div class="video-card-head">
+                    <span class="video-badge video-badge-{{ item.kind|lower }}">{{ item.kind }}</span>
+                    {% if item.duration %}<span class="video-duration">{{ item.duration }}</span>{% endif %}
+                    {% if item.is_tutorial %}<span class="video-tag">Tutorial</span>{% endif %}
+                    {% if item.highlight %}<span class="video-tag video-tag-featured">Most watched</span>{% endif %}
+                </div>
+                <div class="video-card-title">
+                    {% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+                </div>
+                <div class="video-card-meta">
+                    {% if item.author %}{{ item.author }}{% endif %}
+                    {% if item.views %}{% if item.author %} &middot; {% endif %}{{ item.views }} views{% endif %}
+                    {% if item.published %} &middot; {{ item.published }}{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% elif section.has_charts %}
         <div class="charts-container {% if section.chart_svgs|length == 1 %}chart-single{% endif %}">
             {% for svg in section.chart_svgs %}
             {% if section.chart_svgs|length == 1 %}
@@ -740,10 +972,37 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
             {% endfor %}
         </div>
         {% elif section.is_compact %}
+        {% if section.is_discourse %}
+        <a class="discourse-banner" href="https://discourse.osgeo.org/c/qgis/11">
+            <div class="discourse-banner-icon">QGIS<br><span>FORUM</span></div>
+            <div class="discourse-banner-body">
+                <div class="discourse-banner-title">Visit the OSGeo QGIS forum</div>
+                <div class="discourse-banner-meta">discourse.osgeo.org/c/qgis/11 · {{ section.news_items|length }} new threads this month</div>
+            </div>
+        </a>
+        {% endif %}
         <div class="compact-list">
             {% for item in section.news_items %}
             <div class="compact-item">
                 {% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% elif section.is_group_grid %}
+        <div class="member-grid">
+            {% for item in section.news_items %}
+            <div class="member-card">
+                {% if item.icon %}
+                <div class="group-icon">{{ item.icon }}</div>
+                {% endif %}
+                <div class="member-info">
+                    <div class="member-name">
+                        {% if item.url %}<a href="{{ item.url }}">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+                    </div>
+                    {% if item.description %}
+                    <div class="member-meta">{{ item.description }}</div>
+                    {% endif %}
+                </div>
             </div>
             {% endfor %}
         </div>
@@ -813,6 +1072,12 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
 class ShowNotesGenerator:
     """Generate YouTube show notes and PDF reports."""
 
+    #: Rough pacing used to turn section sizes into chapter timestamps.
+    INTRO_SECONDS = 30
+    SECONDS_PER_ITEM = 15
+    MIN_SECTION_SECONDS = 45
+    MAX_SECTION_SECONDS = 150
+
     def __init__(
         self,
         target_month: date,
@@ -826,9 +1091,24 @@ class ShowNotesGenerator:
         """Add a collector result to the report."""
         self.results.append(result)
 
+    @staticmethod
+    def _format_timestamp(seconds: int) -> str:
+        """Format seconds as a YouTube chapter timestamp (M:SS or H:MM:SS)."""
+        hours, remainder = divmod(int(seconds), 3600)
+        minutes, secs = divmod(remainder, 60)
+        if hours:
+            return f"{hours}:{minutes:02d}:{secs:02d}"
+        return f"{minutes}:{secs:02d}"
+
     def _calculate_chapters(self) -> list[dict[str, Any]]:
-        """Build the list of chapters from sections with content."""
+        """Build the list of chapters from sections with content.
+
+        Each chapter carries an estimated timestamp derived from how many
+        items it holds, so the YouTube description ships with usable chapter
+        markers the presenter can nudge after recording.
+        """
         chapters = []
+        elapsed = self.INTRO_SECONDS
 
         for result in self.results:
             if result.success and result.has_items:
@@ -836,7 +1116,16 @@ class ShowNotesGenerator:
                     {
                         "title": result.section_title,
                         "item_count": len(result.items),
+                        "seconds": elapsed,
+                        "timestamp": self._format_timestamp(elapsed),
                     }
+                )
+                elapsed += min(
+                    max(
+                        len(result.items) * self.SECONDS_PER_ITEM,
+                        self.MIN_SECTION_SECONDS,
+                    ),
+                    self.MAX_SECTION_SECONDS,
                 )
 
         return chapters
@@ -1020,6 +1309,33 @@ class ShowNotesGenerator:
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
+    @staticmethod
+    def _video_stats(summary: NewsItem | None) -> list[dict[str, str]]:
+        """Build the stat tiles shown above a YouTube section's cards."""
+        if summary is None:
+            return []
+
+        meta = summary.metadata
+        count = meta.get("count", 0)
+        noun = "Shorts" if meta.get("kind") == "Short" else "Videos"
+        stats = [
+            {"value": str(count), "label": f"{noun} this month"},
+            {"value": str(meta.get("tutorials", 0)), "label": "Tutorials"},
+            {
+                "value": fmt_number(meta.get("total_views", 0)),
+                "label": "Combined views",
+            },
+        ]
+
+        previous = meta.get("previous_count")
+        if previous is not None:
+            delta = count - previous
+            sign = "+" if delta > 0 else ""
+            stats.append(
+                {"value": f"{sign}{delta}", "label": f"vs last month ({previous})"}
+            )
+        return stats
+
     def _build_highlights(self) -> list[dict[str, str]]:
         """Extract top highlights from results for the summary box."""
         highlights = []
@@ -1168,6 +1484,26 @@ class ShowNotesGenerator:
                     )
                 break
 
+        # YouTube activity
+        for result in self.results:
+            if result.section_name not in ("youtube", "youtube_shorts"):
+                continue
+            for item in result.items:
+                meta = item.metadata or {}
+                if meta.get("metric") != "youtube_summary":
+                    continue
+                noun = "Shorts" if meta.get("kind") == "Short" else "videos"
+                tutorials = meta.get("tutorials", 0)
+                tutorial_noun = "tutorial" if tutorials == 1 else "tutorials"
+                highlights.append(
+                    {
+                        "title": f"{meta.get('count', 0)} QGIS {noun} on YouTube",
+                        "summary": (
+                            f"Published this month, {tutorials} of them {tutorial_noun}"
+                        ),
+                    }
+                )
+
         # Website updates count
         for result in self.results:
             if result.section_name == "website_updates" and result.has_items:
@@ -1192,24 +1528,43 @@ class ShowNotesGenerator:
         successful = sum(1 for r in self.results if r.success)
 
         # Compact sections that should use the compact list layout
-        compact_sections = {"mailing_lists", "website_updates"}
+        compact_sections = {
+            "mailing_lists_user",
+            "mailing_lists_developer",
+            "website_updates",
+            "notable_fixes",
+            "discourse",
+        }
         qep_sections = {"qeps"}
         member_sections = {"sustaining_members"}
-        chart_sections = {"analytics", "plugin_stats", "sustaining_members"}
+        chart_sections = {
+            "analytics",
+            "plugin_stats",
+            "sustaining_members",
+            "user_groups",
+            "youtube",
+            "youtube_shorts",
+        }
+        video_sections = {"youtube", "youtube_shorts"}
 
         # Max items per section (top 5 for condensed report)
         section_limits = {
             "releases": 5,
-            "notable_fixes": 5,
+            "notable_fixes": 1000,
             "merged_prs": 5,
             "blog_posts": 5,
             "qeps": 10,
             "website_updates": 10,
-            "mailing_lists": 5,
+            "mailing_lists_user": 1000,
+            "mailing_lists_developer": 1000,
             "conferences": 5,
             "user_groups": 5,
             "analytics": 10,
             "plugin_stats": 10,
+            "psc_minutes": 15,
+            "discourse": 1000,
+            "youtube": 8,
+            "youtube_shorts": 8,
         }
         default_limit = 5
 
@@ -1250,6 +1605,35 @@ class ShowNotesGenerator:
 
             is_member = result.section_name in member_sections
 
+            # Flagship members live on their own slide (added below);
+            # keep the chart slide focused on the summary card only.
+            if result.section_name == "sustaining_members":
+                filtered_items = [
+                    item for item in filtered_items
+                    if item.category != "flagship_member"
+                ]
+            # Same pattern for user_groups: new-this-year groups go on a
+            # dedicated slide so the chart slide stays clean.
+            if result.section_name == "user_groups":
+                filtered_items = [
+                    item for item in filtered_items
+                    if item.category != "new_group"
+                ]
+            # The YouTube summary item drives the stat tiles and the chart,
+            # not a card of its own.
+            is_video = result.section_name in video_sections
+            video_summary = None
+            if is_video:
+                for item in filtered_items:
+                    if item.metadata.get("metric") == "youtube_summary":
+                        video_summary = item
+                filtered_items = [
+                    item for item in filtered_items
+                    if item.metadata.get("metric") != "youtube_summary"
+                ]
+                if not filtered_items:
+                    continue
+
             items = []
             for item in filtered_items[:limit]:
                 desc = self._strip_html(item.description[:300]) if item.description else None
@@ -1260,6 +1644,21 @@ class ShowNotesGenerator:
                     "author": item.author,
                     "description": desc,
                 }
+                # Add video-specific fields
+                if is_video:
+                    meta = item.metadata
+                    duration = meta.get("duration_seconds")
+                    item_dict["kind"] = meta.get("kind", "Video")
+                    item_dict["views"] = (
+                        f"{meta.get('views', 0):,}" if meta.get("views") else ""
+                    )
+                    item_dict["published"] = meta.get("published_text", "")
+                    item_dict["is_tutorial"] = bool(meta.get("is_tutorial"))
+                    item_dict["highlight"] = bool(meta.get("highlight"))
+                    item_dict["duration"] = (
+                        f"{duration // 60}:{duration % 60:02d}" if duration else ""
+                    )
+
                 # Add member-specific fields
                 if is_member:
                     logo = item.metadata.get("logo_url", "")
@@ -1281,13 +1680,86 @@ class ShowNotesGenerator:
                     "error": None,
                     "warnings": list(result.warnings) if result.warnings else [],
                     "news_items": items,
+                    "is_video": is_video,
+                    "stats": self._video_stats(video_summary),
                     "is_qep": result.section_name in qep_sections,
                     "is_compact": result.section_name in compact_sections,
                     "is_member": is_member,
+                    "is_discourse": result.section_name == "discourse",
                     "has_charts": len(section_chart_svgs) > 0,
                     "chart_svgs": section_chart_svgs,
                 }
             )
+
+            # Split out the Flagship members from sustaining_members onto
+            # their own slide so the chart is not crowded by the roster.
+            if result.section_name == "sustaining_members":
+                flagship_items = []
+                for item in result.items:
+                    if item.category != "flagship_member":
+                        continue
+                    flagship_items.append({
+                        "title": self._strip_html(item.title),
+                        "url": item.url,
+                        "date": item.date.isoformat() if item.date else None,
+                        "author": item.author,
+                        "description": (
+                            self._strip_html(item.description[:300])
+                            if item.description else None
+                        ),
+                        "logo_url": item.metadata.get("logo_url", ""),
+                        "level": item.metadata.get("level", ""),
+                    })
+                if flagship_items:
+                    sections.append({
+                        "title": "Flagship Members",
+                        "error": None,
+                        "warnings": [],
+                        "news_items": flagship_items,
+                        "is_qep": False,
+                        "is_compact": False,
+                        "is_member": True,
+                        "has_charts": False,
+                        "chart_svgs": [],
+                    })
+
+            # New user groups this year get their own slide too.
+            if result.section_name == "user_groups":
+                new_group_items = []
+                for item in result.items:
+                    if item.category != "new_group":
+                        continue
+                    new_group_items.append({
+                        "title": self._strip_html(item.title),
+                        "url": item.url,
+                        "date": item.date.isoformat() if item.date else None,
+                        "author": item.author,
+                        "description": (
+                            self._strip_html(item.description[:300])
+                            if item.description else None
+                        ),
+                        "icon": item.metadata.get("icon", ""),
+                        "registered_year": item.metadata.get("registered_year", ""),
+                        "country": item.metadata.get("country", ""),
+                    })
+                if new_group_items:
+                    year_label = new_group_items[0].get("registered_year") or ""
+                    title = (
+                        f"User Groups Added in {year_label}"
+                        if year_label else "New User Groups"
+                    )
+                    sections.append({
+                        "title": title,
+                        "error": None,
+                        "warnings": [],
+                        "news_items": new_group_items,
+                        "is_qep": False,
+                        "is_compact": False,
+                        "is_member": False,
+                        "is_group_grid": True,
+                        "has_charts": False,
+                        "chart_svgs": [],
+                    })
 
         # Build grouped links
         link_groups = []

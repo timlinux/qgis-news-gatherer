@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Collector for QGIS-category threads on the OSGeo Discourse forum."""
 
 from __future__ import annotations

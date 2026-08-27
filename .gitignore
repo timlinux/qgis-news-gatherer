@@ -84,3 +84,28 @@ result-*
 PROMPT.log
 *.log
 .cache/
+
+# Generated outputs
+qgis-news-*.pdf
+qgis-news-*.md
+qgis-news-*.html
+qgis-news-*.txt
+qgis-shownotes-*.md
+qgis-shownotes-*.pdf
+qgis-shownotes-*.html
+
+# Binary artefacts and scratch captures. Branding assets used by the report
+# (hegobg1.webp, qgis-icon-*.png, qgis-logo.svg) are tracked deliberately.
+*.pdf
+Screenshot*.png
+screenshot*.png
+*.mp4
+*.mov
+*.zip
+*.tar.gz
+
+# direnv
+.direnv/
+
+# Output of queued sandbox commands
+claude.out

@@ -1,0 +1,25 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: qgis-news-gatherer
+Upstream-Contact: Kartoza <info@kartoza.com>
+Source: https://github.com/timlinux/qgis-news-gatherer
+
+Files: *.md
+ *.toml
+ *.yaml
+ *.yml
+ *.json
+ *.lock
+ *.nix
+ *.cfg
+ *.txt
+ *.webp
+ *.png
+ *.svg
+ .envrc
+ .exrc
+ .gitignore
+ .pre-commit-config.yaml
+ claude.sh
+ LICENSE
+Copyright: 2026 Kartoza <info@kartoza.com>
+License: GPL-3.0-or-later

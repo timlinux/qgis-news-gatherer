@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Collectors for QGIS usage analytics and plugin statistics from Metabase dashboards."""
 
 from qgis_news_gatherer.collectors.base import BaseCollector, CollectorResult, NewsItem

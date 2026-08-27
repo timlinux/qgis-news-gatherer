@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Mailing list archive collector."""
 
 import re
@@ -6,14 +10,19 @@ from datetime import datetime
 from bs4 import BeautifulSoup
 
 from qgis_news_gatherer.collectors.base import BaseCollector, CollectorResult, NewsItem
-from qgis_news_gatherer.config import settings
 
 
 class MailingListsCollector(BaseCollector):
-    """Collect highlights from QGIS mailing list archives."""
+    """Collect every thread for the month from a pipermail archive.
 
-    section_name = "mailing_lists"
-    section_title = "Mailing List Highlights"
+    Subclassed for each list (qgis-user, qgis-developer, …) so the archive
+    URL and list-tag prefix can be overridden per-list.
+    """
+
+    section_name = "mailing_lists_user"
+    section_title = "QGIS Users Mailing List"
+    archive_base = "https://lists.osgeo.org/pipermail/qgis-user/"
+    list_tag = "qgis-user"
 
     # Month name mapping
     MONTH_NAMES = {
@@ -35,13 +44,16 @@ class MailingListsCollector(BaseCollector):
         """Scrape OSGeo mailing list archives."""
         self.log_verbose("Fetching mailing list archives...")
 
-        items: list[NewsItem] = []
+        # Threads keyed by normalized subject so multiple replies in the
+        # same thread collapse to one entry. We keep the first occurrence
+        # (the thread starter, which appears first in the thread index).
+        threads: dict[str, NewsItem] = {}
         warnings: list[str] = []
 
         # Construct archive URL for target month
         month_name = self.MONTH_NAMES[self.config.target_month.month]
         year = self.config.target_month.year
-        archive_url = f"{settings.mailing_list_url}{year}-{month_name}/thread.html"
+        archive_url = f"{self.archive_base}{year}-{month_name}/thread.html"
 
         self.log_verbose(f"Checking archive: {archive_url}")
 
@@ -52,116 +64,134 @@ class MailingListsCollector(BaseCollector):
                 return CollectorResult(
                     section_name=self.section_name,
                     section_title=self.section_title,
-                    items=items,
+                    items=[],
                     warnings=warnings,
                 )
             response.raise_for_status()
 
             soup = BeautifulSoup(response.text, "lxml")
 
-            # Find thread list - structure varies by mail archive software
+            # The pipermail thread index uses a single nested <ul>. Walk all
+            # links inside it — top-level threads and nested replies share
+            # the same subject after normalization, so dedup handles both.
             thread_list = soup.find("ul", class_="thread") or soup.find("ul")
-
             if thread_list:
-                for li in thread_list.find_all("li", recursive=False)[:50]:
-                    link = li.find("a")
-                    if not link:
-                        continue
+                self._absorb_links(
+                    thread_list.find_all("a"), threads, year, month_name
+                )
 
-                    subject = link.get_text(strip=True)
-                    href = link.get("href", "")
-
-                    # Skip administrative messages
-                    skip_patterns = [
-                        r"^\[qgis-user\]\s*$",
-                        r"^Re:\s*$",
-                        r"digest",
-                        r"unsubscribe",
-                    ]
-                    if any(re.search(p, subject, re.I) for p in skip_patterns):
-                        continue
-
-                    # Clean up subject
-                    subject = re.sub(r"^\[qgis-user\]\s*", "", subject)
-                    subject = re.sub(r"^Re:\s*", "", subject)
-
-                    if len(subject) < 5:
-                        continue
-
-                    # Build full URL
-                    if href and not href.startswith("http"):
-                        full_url = f"{settings.mailing_list_url}{year}-{month_name}/{href}"
-                    else:
-                        full_url = href
-
-                    # Try to get author
-                    author = None
-                    author_elem = li.find("em") or li.find("i")
-                    if author_elem:
-                        author = author_elem.get_text(strip=True)
-
-                    # Try to get date
-                    post_date = None
-                    date_elem = li.find("span", class_="date")
-                    if date_elem:
-                        try:
-                            date_text = date_elem.get_text(strip=True)
-                            post_date = datetime.strptime(date_text, "%Y-%m-%d").date()
-                        except ValueError:
-                            pass
-
-                    items.append(
-                        NewsItem(
-                            title=subject[:200],
-                            url=full_url,
-                            date=post_date,
-                            author=author,
-                            category="Mailing List",
-                        )
-                    )
-
-            # Also try date index if thread index didn't work well
-            if len(items) < 5:
-                date_url = f"{settings.mailing_list_url}{year}-{month_name}/date.html"
+            # Fall back to the date index if the thread page is empty/missing.
+            if not threads:
+                date_url = f"{self.archive_base}{year}-{month_name}/date.html"
                 try:
                     date_response = await self.client.get(date_url)
                     if date_response.status_code == 200:
                         date_soup = BeautifulSoup(date_response.text, "lxml")
-                        for link in date_soup.find_all("a")[:30]:
-                            href = link.get("href", "")
-                            if href.endswith(".html") and href != "thread.html":
-                                subject = link.get_text(strip=True)
-                                if len(subject) > 10 and not any(
-                                    x in subject.lower()
-                                    for x in ["digest", "unsubscribe"]
-                                ):
-                                    full_url = (
-                                        f"{settings.mailing_list_url}"
-                                        f"{year}-{month_name}/{href}"
-                                    )
-                                    # Avoid duplicates
-                                    if not any(i.url == full_url for i in items):
-                                        items.append(
-                                            NewsItem(
-                                                title=subject[:200],
-                                                url=full_url,
-                                                category="Mailing List",
-                                            )
-                                        )
+                        self._absorb_links(
+                            date_soup.find_all("a"), threads, year, month_name
+                        )
                 except Exception:
                     pass
 
         except Exception as e:
             warnings.append(f"Error fetching mailing list: {e}")
 
-        # Limit to most interesting threads (longer subjects often more substantive)
-        items.sort(key=lambda x: len(x.title), reverse=True)
-        items = items[:20]
+        items = list(threads.values())
+        # Newest threads first when we have dates; otherwise preserve order
+        # (which is roughly chronological from the thread index).
+        items.sort(
+            key=lambda x: (x.date is not None, x.date),
+            reverse=True,
+        )
 
-        self.log_verbose(f"Found {len(items)} mailing list threads")
+        self.log_verbose(f"Found {len(items)} unique mailing list threads")
         return CollectorResult(
             section_name=self.section_name,
             section_title=self.section_title,
             items=items,
             warnings=warnings,
         )
+
+    def _absorb_links(
+        self,
+        links: list,
+        threads: dict[str, NewsItem],
+        year: int,
+        month_name: str,
+    ) -> None:
+        """Extract subject links from a pipermail listing and dedupe by subject."""
+        skip_patterns = [
+            rf"^\[{re.escape(self.list_tag)}\]\s*$",
+            r"^Re:\s*$",
+            r"digest",
+            r"unsubscribe",
+        ]
+        for link in links:
+            href = link.get("href", "")
+            if not href or not href.endswith(".html"):
+                continue
+            if href in ("thread.html", "date.html", "author.html", "subject.html"):
+                continue
+
+            subject_raw = link.get_text(strip=True)
+            if any(re.search(p, subject_raw, re.I) for p in skip_patterns):
+                continue
+
+            # Strip any list-tag and reply markers before deduping so that
+            # cross-posts (e.g. "[Qgis-psc] Foo" vs "Foo") collapse together.
+            subject = subject_raw
+            for _ in range(3):
+                stripped = re.sub(
+                    r"^(?:\[[^\]]+\]|(?:Re|Fwd|Fw)\s*:)\s*",
+                    "",
+                    subject,
+                    flags=re.I,
+                )
+                if stripped == subject:
+                    break
+                subject = stripped
+            subject = subject.strip()
+            if len(subject) < 5:
+                continue
+
+            key = re.sub(r"\s+", " ", subject.lower()).strip()
+            if key in threads:
+                continue
+
+            if href.startswith("http"):
+                full_url = href
+            else:
+                full_url = f"{self.archive_base}{year}-{month_name}/{href}"
+
+            parent = link.find_parent("li")
+            author = None
+            post_date = None
+            if parent is not None:
+                author_elem = parent.find("em") or parent.find("i")
+                if author_elem:
+                    author = author_elem.get_text(strip=True)
+                date_elem = parent.find("span", class_="date")
+                if date_elem:
+                    try:
+                        post_date = datetime.strptime(
+                            date_elem.get_text(strip=True), "%Y-%m-%d"
+                        ).date()
+                    except ValueError:
+                        pass
+
+            threads[key] = NewsItem(
+                title=subject[:200],
+                url=full_url,
+                date=post_date,
+                author=author,
+                category="Mailing List",
+            )
+
+
+class DeveloperMailingListsCollector(MailingListsCollector):
+    """Collect every thread for the month from the qgis-developer list."""
+
+    section_name = "mailing_lists_developer"
+    section_title = "QGIS Developer Mailing List"
+    archive_base = "https://lists.osgeo.org/pipermail/qgis-developer/"
+    list_tag = "qgis-developer"

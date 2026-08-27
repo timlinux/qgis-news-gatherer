@@ -1,9 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Base collector class for all data sources."""
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date as date_type
@@ -15,6 +20,35 @@ import httpx
 from rich.console import Console
 
 from qgis_news_gatherer.config import ReportConfig, settings
+
+
+# Pictographic emoji ranges that render via Noto Color Emoji at full glyph
+# size in WeasyPrint. Strip them from user-supplied content to keep inline
+# card layouts intact. Pure-text symbols (©, ™, arrows, geometric shapes
+# without VS16) are left alone.
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001F5FF"  # symbols & pictographs
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F680-\U0001F6FF"  # transport & map
+    "\U0001F700-\U0001F77F"  # alchemical
+    "\U0001F780-\U0001F7FF"  # geometric shapes ext
+    "\U0001F800-\U0001F8FF"  # supplemental arrows-c
+    "\U0001F900-\U0001F9FF"  # supplemental symbols & pictographs
+    "\U0001FA00-\U0001FA6F"  # chess symbols
+    "\U0001FA70-\U0001FAFF"  # symbols & pictographs ext-a
+    "\U00002600-\U000026FF"  # miscellaneous symbols (sun, star, etc.)
+    "\U00002700-\U000027BF"  # dingbats
+    "\U0001F1E6-\U0001F1FF"  # regional indicators (flags)
+    "\ufe0f"  # VS16 emoji presentation selector
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def strip_emoji(text: str) -> str:
+    """Remove pictographic/color emoji from a string."""
+    return _EMOJI_RE.sub("", text)
 
 
 @dataclass

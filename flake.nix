@@ -38,6 +38,7 @@
           weasyprint
           markdown
           jinja2
+          pypdf
 
           # Development tools
           pytest
@@ -50,6 +51,20 @@
           types-beautifulsoup4
           types-python-dateutil
         ]);
+
+        # Bundle Noto Sans + Noto Sans CJK so WeasyPrint can render
+        # Latin, CJK, and a broad emoji/symbol set without missing glyphs.
+        # Use the static (non-variable) Noto CJK instance so mobile PDF
+        # viewers — which often choke on variable-font subsetting — can
+        # render the embedded subset cleanly.
+        fontsConf = pkgs.makeFontsConf {
+          fontDirectories = [
+            pkgs.dejavu_fonts
+            pkgs.noto-fonts
+            pkgs.noto-fonts-cjk-sans-static
+            pkgs.noto-fonts-color-emoji
+          ];
+        };
 
       in {
         devShells.default = pkgs.mkShell {
@@ -76,6 +91,7 @@
             echo "  nix run .#docs         - Build documentation"
             echo ""
             export PYTHONPATH="$PWD/src:$PYTHONPATH"
+            export FONTCONFIG_FILE="${fontsConf}"
           '';
         };
 
@@ -97,6 +113,7 @@
               pydantic
               pydantic-settings
               python-dateutil
+              pypdf
             ];
           };
         };
@@ -107,6 +124,7 @@
           runGatherer = args: toString (pkgs.writeShellScript "run-news-gatherer" ''
             OUTDIR="$(pwd)"
             export PYTHONPATH="${srcDir}/src:$PYTHONPATH"
+            export FONTCONFIG_FILE="${fontsConf}"
             MONTH="''${1:-${monthArg}}"
             cd "$OUTDIR"
             ${python}/bin/python -m qgis_news_gatherer.cli --month "$MONTH" ${args}

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Collector for QGIS sustaining members."""
 
 import asyncio
@@ -25,7 +29,10 @@ class SustainingMembersCollector(BaseCollector):
         warnings: list[str] = []
 
         # Fetch the members list page
-        response = await self.client.get(self.MEMBERS_URL)
+        response = await self.client.get(
+            self.MEMBERS_URL,
+            headers={"User-Agent": "Mozilla/5.0 (QGIS-News-Gatherer/1.0)"},
+        )
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "lxml")
 
@@ -54,42 +61,67 @@ class SustainingMembersCollector(BaseCollector):
             )
         )
 
-        # Fetch detail pages to find members added in the target month
-        # Check all members concurrently (limited batch)
-        new_members = await self._find_new_members(all_members)
+        # Fetch detail pages for every member so we have start dates and
+        # websites for the flagship roster and can flag new joiners.
+        await self._enrich_members(all_members)
 
-        for member in new_members:
-            logo_url = member.get("logo", "")
-            if logo_url and not logo_url.startswith("http"):
-                logo_url = f"{self.BASE_URL}{logo_url}"
+        for member in all_members:
+            if member.get("is_new"):
+                items.append(self._build_member_item(member, "new_member"))
 
-            items.append(
-                NewsItem(
-                    title=f"New {member['level']} member: {member['name']}",
-                    url=member.get("website") or member.get("detail_url"),
-                    description=(
-                        f"{member.get('country', '')}. "
-                        f"Joined {member.get('start_date', 'recently')}."
-                    ),
-                    date=member.get("start_date_parsed"),
-                    category="new_member",
-                    tags=[member.get("level", "").lower()],
-                    metadata={
-                        "level": member.get("level"),
-                        "country": member.get("country"),
-                        "logo_url": logo_url,
-                        "website": member.get("website"),
-                        "start_date": member.get("start_date"),
-                    },
-                )
-            )
+        for member in all_members:
+            if member.get("level") == "Flagship":
+                items.append(self._build_member_item(member, "flagship_member"))
 
-        self.log_verbose(f"Found {len(items)} member items ({len(new_members)} new)")
+        new_count = sum(1 for m in all_members if m.get("is_new"))
+        flagship_count = sum(1 for m in all_members if m.get("level") == "Flagship")
+        self.log_verbose(
+            f"Found {len(items)} member items "
+            f"({new_count} new, {flagship_count} flagship)"
+        )
         return CollectorResult(
             section_name=self.section_name,
             section_title=self.section_title,
             items=items,
             warnings=warnings,
+        )
+
+    def _build_member_item(self, member: dict, category: str) -> NewsItem:
+        """Convert a parsed-and-enriched member dict into a NewsItem."""
+        logo_url = member.get("logo", "")
+        if logo_url and not logo_url.startswith("http"):
+            logo_url = f"{self.BASE_URL}{logo_url}"
+
+        if category == "new_member":
+            title = f"New {member['level']} member: {member['name']}"
+            description = (
+                f"{member.get('country', '')}. "
+                f"Joined {member.get('start_date', 'recently')}."
+            )
+        else:
+            title = member["name"]
+            parts = []
+            if member.get("start_date"):
+                parts.append(f"Since {member['start_date']}")
+            if member.get("country"):
+                parts.append(member["country"])
+            description = " · ".join(parts) if parts else None
+
+        return NewsItem(
+            title=title,
+            url=member.get("website") or member.get("detail_url"),
+            description=description,
+            date=member.get("start_date_parsed"),
+            category=category,
+            tags=[member.get("level", "").lower()],
+            metadata={
+                "level": member.get("level"),
+                "country": member.get("country"),
+                "logo_url": logo_url,
+                "website": member.get("website"),
+                "start_date": member.get("start_date"),
+                "detail_url": member.get("detail_url"),
+            },
         )
 
     def _parse_members_list(self, soup: BeautifulSoup) -> list[dict]:
@@ -134,29 +166,23 @@ class SustainingMembersCollector(BaseCollector):
 
         return members
 
-    async def _find_new_members(self, members: list[dict]) -> list[dict]:
-        """Check member detail pages to find those added in the target month."""
-        new_members = []
-
-        # Process in batches to avoid overwhelming the server
+    async def _enrich_members(self, members: list[dict]) -> None:
+        """Mutate each member dict in place with detail-page info."""
         batch_size = 10
         for i in range(0, len(members), batch_size):
-            batch = members[i : i + batch_size]
-            tasks = [
-                self._check_member_date(m) for m in batch if m.get("detail_url")
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            for result in results:
-                if isinstance(result, dict) and result.get("is_new"):
-                    new_members.append(result)
-
-        return new_members
+            batch = [m for m in members[i : i + batch_size] if m.get("detail_url")]
+            await asyncio.gather(
+                *[self._check_member_date(m) for m in batch],
+                return_exceptions=True,
+            )
 
     async def _check_member_date(self, member: dict) -> dict:
         """Fetch a member's detail page and check their start date."""
         try:
-            response = await self.client.get(member["detail_url"])
+            response = await self.client.get(
+                member["detail_url"],
+                headers={"User-Agent": "Mozilla/5.0 (QGIS-News-Gatherer/1.0)"},
+            )
             response.raise_for_status()
             soup = BeautifulSoup(response.text, "lxml")
 

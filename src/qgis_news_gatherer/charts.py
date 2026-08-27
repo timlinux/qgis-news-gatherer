@@ -1,9 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """SVG chart generation for PDF reports.
 
 Generates inline SVG charts compatible with WeasyPrint (no JavaScript).
 Uses QGIS branding colors.
 """
 
+import math
 from typing import Any
 
 
@@ -38,6 +43,10 @@ def _fmt_number(n: int | float) -> str:
     if abs(n) >= 1_000:
         return f"{n / 1_000:.1f}K"
     return f"{n:,.0f}"
+
+
+#: Public alias - the report reuses this for its stat tiles.
+fmt_number = _fmt_number
 
 
 def _escape(text: str) -> str:
@@ -431,6 +440,159 @@ def pie_chart(
     return "\n".join(lines)
 
 
+def grouped_bar_chart(
+    categories: list[str],
+    series: list[tuple[str, list[int | float]]],
+    title: str = "",
+    width: int = 520,
+    height: int = 240,
+    colors: list[str] | None = None,
+) -> str:
+    """Generate a vertical grouped bar chart as an SVG string.
+
+    Used for month-on-month comparisons where several counts share the same
+    x-axis (e.g. videos vs tutorials published each month).
+
+    Args:
+        categories: X-axis labels, in display order (e.g. months).
+        series: List of (series_name, values) tuples. Each values list must
+            be the same length as ``categories``.
+        title: Chart title.
+        width: SVG width.
+        height: SVG height.
+        colors: Bar colors per series; defaults to the QGIS bar palette.
+    """
+    series = [(name, values) for name, values in series if any(values)]
+    if not categories or not series:
+        return ""
+    if any(len(values) != len(categories) for _, values in series):
+        return ""
+
+    palette = colors or BAR_PALETTE
+    padding = {"top": 44 if title else 20, "right": 16, "bottom": 52, "left": 44}
+    chart_w = width - padding["left"] - padding["right"]
+    chart_h = height - padding["top"] - padding["bottom"]
+
+    max_val = max(max(values) for _, values in series)
+    if max_val <= 0:
+        max_val = 1
+    # Round the axis up to four whole steps: these are counts, so fractional
+    # grid labels ("2.3 videos") would read as noise. The head room also
+    # keeps the value label above the tallest bar from being clipped.
+    step = math.ceil(max_val / 4) if max_val > 4 else 1
+    while step * 4 <= max_val:
+        step += 1
+    max_val = step * 4
+
+    group_w = chart_w / len(categories)
+    group_pad = min(12.0, group_w * 0.18)
+    bar_w = max(4.0, (group_w - group_pad) / len(series))
+    baseline = padding["top"] + chart_h
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="0 0 {width} {height}" '
+        f'style="font-family: \'Segoe UI\', Tahoma, sans-serif; background: {COLORS["bg"]}; '
+        f'border: 1px solid {COLORS["border"]}; border-radius: 6px; margin: 8px 0;">',
+    ]
+
+    if title:
+        lines.append(
+            f'<text x="{width // 2}" y="28" text-anchor="middle" '
+            f'font-size="11" font-weight="600" fill="{COLORS["primary_dark"]}">'
+            f'{_escape(title)}</text>'
+        )
+
+    # Horizontal grid lines with value labels
+    for step in range(5):
+        frac = step / 4
+        grid_y = baseline - frac * chart_h
+        lines.append(
+            f'<line x1="{padding["left"]}" y1="{grid_y:.1f}" '
+            f'x2="{padding["left"] + chart_w}" y2="{grid_y:.1f}" '
+            f'stroke="{COLORS["grid"]}" stroke-width="1"/>'
+        )
+        lines.append(
+            f'<text x="{padding["left"] - 8}" y="{grid_y + 3:.1f}" '
+            f'text-anchor="end" font-size="7.5" fill="{COLORS["text_muted"]}">'
+            f'{_fmt_number(frac * max_val)}</text>'
+        )
+
+    # Bars
+    for group_index, category in enumerate(categories):
+        group_x = padding["left"] + group_index * group_w + group_pad / 2
+        for series_index, (_, values) in enumerate(series):
+            value = values[group_index]
+            bar_h = (value / max_val) * chart_h if value else 0
+            bar_x = group_x + series_index * bar_w
+            bar_y = baseline - bar_h
+            lines.append(
+                f'<rect x="{bar_x:.1f}" y="{bar_y:.1f}" '
+                f'width="{max(bar_w - 2, 2):.1f}" height="{max(bar_h, 1):.1f}" '
+                f'fill="{palette[series_index % len(palette)]}" rx="2"/>'
+            )
+            if value:
+                lines.append(
+                    f'<text x="{bar_x + (bar_w - 2) / 2:.1f}" y="{bar_y - 4:.1f}" '
+                    f'text-anchor="middle" font-size="7.5" font-weight="600" '
+                    f'fill="{COLORS["text"]}">{_fmt_number(value)}</text>'
+                )
+
+        lines.append(
+            f'<text x="{group_x + (group_w - group_pad) / 2:.1f}" '
+            f'y="{baseline + 14:.1f}" text-anchor="middle" font-size="8" '
+            f'fill="{COLORS["text_muted"]}">{_escape(category)}</text>'
+        )
+
+    # Legend
+    legend_y = height - 14
+    legend_x = padding["left"]
+    for series_index, (name, _) in enumerate(series):
+        lines.append(
+            f'<rect x="{legend_x:.1f}" y="{legend_y - 7}" width="9" height="9" '
+            f'fill="{palette[series_index % len(palette)]}" rx="2"/>'
+        )
+        lines.append(
+            f'<text x="{legend_x + 13:.1f}" y="{legend_y + 1}" font-size="8" '
+            f'fill="{COLORS["text_light"]}">{_escape(name)}</text>'
+        )
+        legend_x += 22 + len(name) * 5
+
+    lines.append("</svg>")
+    return "\n".join(lines)
+
+
+def _aggregate_platforms_by_os(data: dict[str, int]) -> dict[str, int]:
+    """Roll per-version platform counts up into Windows / Mac / Linux+Other.
+
+    The analytics card returns rows like "Windows 11 Version 2009", "macOS 14",
+    "Ubuntu 24.04"; presenting them grouped by OS family is much more
+    informative than a long version-by-version list.
+    """
+    buckets = {"Windows": 0, "Mac": 0, "Linux & Other": 0}
+    mac_markers = ("mac", "darwin", "osx", "os x")
+    linux_markers = (
+        "linux", "ubuntu", "debian", "fedora", "arch", "manjaro",
+        "centos", "rhel", "red hat", "suse", "mint", "pop!_os", "popos",
+        "gentoo", "alpine",
+    )
+    for name, count in data.items():
+        low = (name or "").lower()
+        try:
+            value = int(count)
+        except (TypeError, ValueError):
+            continue
+        if "windows" in low or low.startswith("win "):
+            buckets["Windows"] += value
+        elif any(m in low for m in mac_markers):
+            buckets["Mac"] += value
+        elif any(m in low for m in linux_markers):
+            buckets["Linux & Other"] += value
+        else:
+            buckets["Linux & Other"] += value
+    return {k: v for k, v in buckets.items() if v > 0}
+
+
 def generate_analytics_charts(results: list[Any]) -> list[dict[str, str]]:
     """Generate chart SVGs from analytics collector results.
 
@@ -471,13 +633,15 @@ def generate_analytics_charts(results: list[Any]) -> list[dict[str, str]]:
                     })
 
                 elif metric == "top_platforms" and meta.get("data"):
-                    data_dict = meta["data"]
-                    sorted_data = sorted(data_dict.items(), key=lambda x: x[1], reverse=True)[:8]
+                    aggregated = _aggregate_platforms_by_os(meta["data"])
+                    sorted_data = sorted(
+                        aggregated.items(), key=lambda x: x[1], reverse=True
+                    )
                     charts.append({
-                        "title": "Top Platforms",
+                        "title": "Platforms by OS",
                         "svg": horizontal_bar_chart(
                             sorted_data,
-                            title="Top Platforms (30 days)",
+                            title="Platforms by OS (30 days)",
                             width=520,
                             max_label_width=140,
                         ),
@@ -563,5 +727,56 @@ def generate_analytics_charts(results: list[Any]) -> list[dict[str, str]]:
                                 colors=member_colors,
                             ),
                         })
+
+        elif result.section_name in ("youtube", "youtube_shorts"):
+            for item in result.items:
+                meta = item.metadata or {}
+                if meta.get("metric") != "youtube_summary":
+                    continue
+
+                history = meta.get("history") or {}
+                count_key = meta.get("count_key", "videos")
+                tutorial_key = meta.get("tutorial_key", "tutorials")
+                # Last six recorded months, oldest first.
+                months = sorted(history)[-6:]
+                if not months:
+                    continue
+
+                counts = [int(history[m].get(count_key, 0)) for m in months]
+                tutorials = [int(history[m].get(tutorial_key, 0)) for m in months]
+                noun = "Shorts" if meta.get("kind") == "Short" else "Videos"
+                charts.append({
+                    "title": f"QGIS {noun} Per Month",
+                    "svg": grouped_bar_chart(
+                        months,
+                        [(noun, counts), ("Tutorials", tutorials)],
+                        title=f"QGIS {noun} Published Per Month",
+                        width=520,
+                        height=240,
+                    ),
+                })
+
+        elif result.section_name == "user_groups":
+            for item in result.items:
+                meta = item.metadata or {}
+                if meta.get("metric") != "user_groups_summary":
+                    continue
+                dist = meta.get("year_distribution") or {}
+                # Sort by year ascending so the bar chart reads chronologically
+                sorted_data = sorted(
+                    dist.items(),
+                    key=lambda x: x[0] if x[0] and x[0].isdigit() else "0",
+                )
+                if sorted_data:
+                    charts.append({
+                        "title": "User Groups",
+                        "svg": horizontal_bar_chart(
+                            sorted_data,
+                            title="User Groups Registered Per Year",
+                            width=520,
+                            max_label_width=80,
+                            multi_color=False,
+                        ),
+                    })
 
     return charts

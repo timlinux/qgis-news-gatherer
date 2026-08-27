@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Collector for QGIS user group updates."""
 
 import re
@@ -38,6 +42,12 @@ class UserGroupsCollector(BaseCollector):
         removed_groups = [g for g in groups if g.get("removed")]
         countries = {g["country"] for g in active_groups if g.get("country")}
 
+        # Build the per-year distribution for charting
+        year_distribution: dict[str, int] = {}
+        for g in active_groups:
+            year = g.get("registered_year") or "Unknown"
+            year_distribution[year] = year_distribution.get(year, 0) + 1
+
         # Add summary item
         items.append(
             NewsItem(
@@ -50,9 +60,11 @@ class UserGroupsCollector(BaseCollector):
                 ),
                 category="summary",
                 metadata={
+                    "metric": "user_groups_summary",
                     "total_active": len(active_groups),
                     "total_countries": len(countries),
                     "total_removed": len(removed_groups),
+                    "year_distribution": year_distribution,
                 },
             )
         )
@@ -62,21 +74,25 @@ class UserGroupsCollector(BaseCollector):
         new_this_year = [
             g for g in active_groups if g.get("registered_year") == target_year
         ]
-        if new_this_year:
-            for group in new_this_year:
-                items.append(
-                    NewsItem(
-                        title=f"New user group: {group['name']}",
-                        url=group.get("url"),
-                        description=(
-                            f"Registered in {target_year}. "
-                            f"Contact: {group.get('contact', 'Unknown')}"
-                        ),
-                        category="new_group",
-                        tags=["new", target_year],
-                        metadata=group,
-                    )
+        for group in new_this_year:
+            items.append(
+                NewsItem(
+                    title=group["name"] or "Unknown",
+                    url=group.get("url"),
+                    description=(
+                        f"Registered {target_year}"
+                        + (f" · Contact: {group['contact']}" if group.get("contact") else "")
+                    ),
+                    category="new_group",
+                    tags=["new", target_year],
+                    metadata={
+                        "icon": group.get("icon", ""),
+                        "country": group.get("country", ""),
+                        "contact": group.get("contact", ""),
+                        "registered_year": target_year,
+                    },
                 )
+            )
 
         # 3. Check for recent changes to the groups page via GitHub commits
         await self._check_groups_page_changes(items, warnings)
@@ -102,44 +118,35 @@ class UserGroupsCollector(BaseCollector):
 
         groups: list[dict] = []
         year_sections: dict[str, list[dict]] = {}
-        current_year = ""
-        is_removed = False
 
-        for line in content.split("\n"):
-            # Detect year sections: ### Registered 2024
-            year_match = re.match(
-                r"###\s+Registered\s+(\d{4}(?:\s+or\s+earlier)?)", line
-            )
-            if year_match:
-                year_text = year_match.group(1)
-                current_year = re.search(r"\d{4}", year_text).group()
-                is_removed = False
-                continue
+        # Split the file into sections by the "### Registered YYYY..." and
+        # "### Removed" headings so we can attribute multi-line shortcodes
+        # to the right year. Splitting on the heading is more robust than
+        # walking line-by-line because each shortcode spans several lines.
+        section_re = re.compile(
+            r"^###\s+(Registered\s+\d{4}(?:\s+or\s+earlier)?|Removed.*)$",
+            re.MULTILINE | re.IGNORECASE,
+        )
+        positions = [(m.start(), m.group(1)) for m in section_re.finditer(content)]
+        positions.append((len(content), ""))
 
-            # Detect removed section
-            if re.match(r"###\s+Removed", line, re.IGNORECASE):
-                is_removed = True
-                continue
+        shortcode_re = re.compile(
+            r"\{\{<\s*rich-list\s+(.*?)\s*>\}\}", re.DOTALL
+        )
 
-            # Parse rich-list shortcodes
-            shortcode_match = re.search(
-                r'\{\{<\s*rich-list\s+(.*?)\s*>\}\}', line
-            )
-            if shortcode_match:
-                attrs = shortcode_match.group(1)
-                group = self._parse_shortcode_attrs(attrs)
+        for (start, heading), (end, _) in zip(positions[:-1], positions[1:]):
+            year_match = re.search(r"(\d{4})", heading)
+            is_removed = heading.lower().startswith("removed")
+            current_year = year_match.group(1) if year_match else ""
+            block = content[start:end]
+
+            for sc in shortcode_re.finditer(block):
+                group = self._parse_shortcode_attrs(sc.group(1))
                 group["registered_year"] = current_year
                 group["removed"] = is_removed
-
-                # Extract country from title
-                name = group.get("name", "")
-                group["country"] = self._extract_country(name)
-
+                group["country"] = self._extract_country(group.get("name", ""))
                 groups.append(group)
-
-                if current_year not in year_sections:
-                    year_sections[current_year] = []
-                year_sections[current_year].append(group)
+                year_sections.setdefault(current_year, []).append(group)
 
         return groups, year_sections
 
@@ -147,16 +154,15 @@ class UserGroupsCollector(BaseCollector):
     def _parse_shortcode_attrs(attrs_str: str) -> dict:
         """Parse Hugo shortcode attributes into a dict."""
         result = {}
-        # Match key="value" pairs
-        for match in re.finditer(r'(\w+)="([^"]*)"', attrs_str):
+        # Match key = "value" pairs, tolerating whitespace around =.
+        for match in re.finditer(r'(\w+)\s*=\s*"([^"]*)"', attrs_str):
             key = match.group(1)
-            value = match.group(2)
+            value = match.group(2).strip()
             if key == "listLink":
                 result["url"] = value if value.startswith("http") else f"https://{value}"
             elif key == "listTitle":
                 result["name"] = value
             elif key == "listSubtitle":
-                # Extract contact name from "Contact: Name"
                 contact = value.replace("Contact:", "").strip()
                 result["contact"] = contact
             elif key == "icon":

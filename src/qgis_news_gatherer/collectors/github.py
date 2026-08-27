@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """GitHub-based collectors for releases, PRs, discussions, and QEPs."""
 
 from datetime import datetime
@@ -65,27 +69,193 @@ class ReleasesCollector(BaseCollector):
 
 
 class NotableFixesCollector(BaseCollector):
-    """Collect notable bug fixes from merged PRs."""
+    """Collect every PR merged into qgis/QGIS during the target month."""
 
     section_name = "notable_fixes"
-    section_title = "Notable Fixes"
+    section_title = "Merged PRs"
 
     async def collect(self) -> CollectorResult:
-        """Fetch merged PRs with bug label from GitHub API."""
-        self.log_verbose("Fetching notable fixes from GitHub...")
+        """Fetch every merged PR from GitHub, paginating to 1000 results."""
+        self.log_verbose("Fetching all merged PRs from GitHub...")
 
-        # Search for merged PRs with bug-related labels
         month_start = self.config.month_start().isoformat()
         month_end = self.config.month_end().isoformat()
 
         query = (
             f"repo:{settings.qgis_repo} is:pr is:merged "
-            f"merged:{month_start}..{month_end} "
-            f"label:bug,bugfix,\"bug fix\",crash"
+            f"merged:{month_start}..{month_end}"
         )
 
         url = f"{settings.github_api_url}/search/issues"
-        params = {"q": query, "sort": "updated", "order": "desc", "per_page": 50}
+        items: list[NewsItem] = []
+        warnings: list[str] = []
+        incomplete = False
+
+        # GitHub Search API caps at 1000 results: 10 pages * 100 per_page.
+        for page in range(1, 11):
+            params = {
+                "q": query,
+                "sort": "updated",
+                "order": "desc",
+                "per_page": 100,
+                "page": page,
+            }
+            response = await self.client.get(
+                url, params=params, headers=settings.get_github_headers()
+            )
+            response.raise_for_status()
+            data = response.json()
+            page_items = data.get("items", [])
+            if data.get("incomplete_results"):
+                incomplete = True
+
+            for pr in page_items:
+                merged_at = pr.get("pull_request", {}).get("merged_at")
+                if merged_at:
+                    merged_date = datetime.fromisoformat(
+                        merged_at.replace("Z", "+00:00")
+                    ).date()
+                else:
+                    merged_date = None
+
+                labels = [label.get("name", "") for label in pr.get("labels", [])]
+
+                items.append(
+                    NewsItem(
+                        title=pr.get("title", "Untitled"),
+                        url=pr.get("html_url"),
+                        description=pr.get("body", "")[:300] if pr.get("body") else None,
+                        date=merged_date,
+                        author=pr.get("user", {}).get("login"),
+                        tags=labels,
+                        metadata={
+                            "pr_number": pr.get("number"),
+                            "state": pr.get("state"),
+                        },
+                    )
+                )
+
+            if len(page_items) < 100:
+                break
+
+        if incomplete:
+            warnings.append("Search results may be incomplete due to GitHub API limits")
+
+        self.log_verbose(f"Found {len(items)} merged PRs")
+        return CollectorResult(
+            section_name=self.section_name,
+            section_title=self.section_title,
+            items=items,
+            warnings=warnings,
+        )
+
+
+class MergedPRsCollector(BaseCollector):
+    """Collect key merged PRs (features, improvements) from the QGIS repo."""
+
+    section_name = "merged_prs"
+    section_title = "Key Merged Pull Requests"
+
+    # Labels that indicate bug fixes (already covered by NotableFixesCollector)
+    BUG_LABELS = {"bug", "bugfix", "bug fix", "crash", "regression"}
+
+    # Labels that indicate significant/notable PRs worth highlighting
+    NOTABLE_LABELS = {
+        "feature", "enhancement", "new feature", "improvement",
+        "performance", "documentation", "API", "processing",
+        "3d", "labeling", "rendering", "expressions", "layout",
+        "server", "authentication", "data provider", "digitizing",
+        "gps", "sketching", "sketchers",
+    }
+
+    async def collect(self) -> CollectorResult:
+        """Fetch key merged PRs from GitHub API."""
+        self.log_verbose("Fetching key merged PRs from GitHub...")
+
+        month_start = self.config.month_start().isoformat()
+        month_end = self.config.month_end().isoformat()
+
+        items: list[NewsItem] = []
+        warnings: list[str] = []
+
+        # Strategy 1: Search for PRs with notable labels
+        for label in ["feature", "enhancement", "new feature", "performance"]:
+            query = (
+                f"repo:{settings.qgis_repo} is:pr is:merged "
+                f"merged:{month_start}..{month_end} "
+                f"label:\"{label}\""
+            )
+
+            url = f"{settings.github_api_url}/search/issues"
+            params = {"q": query, "sort": "reactions", "order": "desc", "per_page": 30}
+
+            response = await self.client.get(
+                url, params=params, headers=settings.get_github_headers()
+            )
+            response.raise_for_status()
+
+            data = response.json()
+            for pr in data.get("items", []):
+                pr_number = pr.get("number")
+                # Skip if already added
+                if any(
+                    i.metadata.get("pr_number") == pr_number for i in items
+                ):
+                    continue
+
+                labels = {
+                    label.get("name", "").lower()
+                    for label in pr.get("labels", [])
+                }
+                # Skip bug fixes (covered by NotableFixesCollector)
+                if labels & self.BUG_LABELS:
+                    continue
+
+                merged_at = pr.get("pull_request", {}).get("merged_at")
+                merged_date = None
+                if merged_at:
+                    merged_date = datetime.fromisoformat(
+                        merged_at.replace("Z", "+00:00")
+                    ).date()
+
+                display_labels = sorted(
+                    labels - {"feature", "enhancement", "new feature"}
+                )
+
+                items.append(
+                    NewsItem(
+                        title=pr.get("title", "Untitled"),
+                        url=pr.get("html_url"),
+                        description=pr.get("body", "")[:300]
+                        if pr.get("body")
+                        else None,
+                        date=merged_date,
+                        author=pr.get("user", {}).get("login"),
+                        tags=display_labels,
+                        metadata={
+                            "pr_number": pr_number,
+                            "reactions": pr.get("reactions", {}).get(
+                                "total_count", 0
+                            ),
+                            "comments": pr.get("comments", 0),
+                        },
+                    )
+                )
+
+        # Strategy 2: Also get most-reacted merged PRs (popular PRs)
+        query = (
+            f"repo:{settings.qgis_repo} is:pr is:merged "
+            f"merged:{month_start}..{month_end} "
+            f"comments:>3"
+        )
+
+        url = f"{settings.github_api_url}/search/issues"
+        params = {
+            "q": query,
+            "sort": "reactions",
+            "order": "desc",
+            "per_page": 20,
+        }
 
         response = await self.client.get(
             url, params=params, headers=settings.get_github_headers()
@@ -93,37 +263,62 @@ class NotableFixesCollector(BaseCollector):
         response.raise_for_status()
 
         data = response.json()
-        items: list[NewsItem] = []
-        warnings: list[str] = []
-
         for pr in data.get("items", []):
-            merged_at = pr.get("pull_request", {}).get("merged_at")
-            if merged_at:
-                merged_date = datetime.fromisoformat(merged_at.replace("Z", "+00:00")).date()
-            else:
-                merged_date = None
+            pr_number = pr.get("number")
+            if any(i.metadata.get("pr_number") == pr_number for i in items):
+                continue
 
-            labels = [label.get("name", "") for label in pr.get("labels", [])]
+            labels = {
+                label.get("name", "").lower()
+                for label in pr.get("labels", [])
+            }
+            if labels & self.BUG_LABELS:
+                continue
+
+            merged_at = pr.get("pull_request", {}).get("merged_at")
+            merged_date = None
+            if merged_at:
+                merged_date = datetime.fromisoformat(
+                    merged_at.replace("Z", "+00:00")
+                ).date()
 
             items.append(
                 NewsItem(
                     title=pr.get("title", "Untitled"),
                     url=pr.get("html_url"),
-                    description=pr.get("body", "")[:300] if pr.get("body") else None,
+                    description=pr.get("body", "")[:300]
+                    if pr.get("body")
+                    else None,
                     date=merged_date,
                     author=pr.get("user", {}).get("login"),
-                    tags=labels,
+                    tags=sorted(labels),
                     metadata={
-                        "pr_number": pr.get("number"),
-                        "state": pr.get("state"),
+                        "pr_number": pr_number,
+                        "reactions": pr.get("reactions", {}).get(
+                            "total_count", 0
+                        ),
+                        "comments": pr.get("comments", 0),
                     },
                 )
             )
 
         if data.get("incomplete_results"):
-            warnings.append("Search results may be incomplete due to GitHub API limits")
+            warnings.append(
+                "Search results may be incomplete due to GitHub API limits"
+            )
 
-        self.log_verbose(f"Found {len(items)} notable fixes")
+        # Sort by reactions + comments (most notable first)
+        items.sort(
+            key=lambda x: (
+                x.metadata.get("reactions", 0) + x.metadata.get("comments", 0)
+            ),
+            reverse=True,
+        )
+
+        # Limit to top items
+        items = items[:20]
+
+        self.log_verbose(f"Found {len(items)} key merged PRs")
         return CollectorResult(
             section_name=self.section_name,
             section_title=self.section_title,
