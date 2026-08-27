@@ -16,6 +16,7 @@ cd "$(dirname "$0")" || exit 1
 exec > >(tee claude.out) 2>&1
 
 REPO_SLUG="timlinux/qgis-news-gatherer"
+REPO_SSH="git@github.com:timlinux/qgis-news-gatherer.git"
 FAILED=0
 
 step() {
@@ -102,18 +103,22 @@ Bumps the version to 0.2.0 and adds a CHANGELOG."
 fi
 
 step "Create the GitHub repository"
-if git remote get-url origin >/dev/null 2>&1; then
-    printf '   remote origin already set: %s\n' "$(git remote get-url origin)"
-elif gh repo view "$REPO_SLUG" >/dev/null 2>&1; then
-    printf '   %s already exists, wiring up the remote\n' "$REPO_SLUG"
-    run git remote add origin "https://github.com/$REPO_SLUG.git"
+if gh repo view "$REPO_SLUG" >/dev/null 2>&1; then
+    printf '   %s already exists\n' "$REPO_SLUG"
 else
     run gh repo create "$REPO_SLUG" \
         --public \
-        --source=. \
-        --remote=origin \
         --description "Automated content collection for the QGIS monthly YouTube news segment"
 fi
+
+step "Wire up the remote (ssh)"
+# gh's own git_protocol setting is https, so set the remote explicitly.
+if git remote get-url origin >/dev/null 2>&1; then
+    run git remote set-url origin "$REPO_SSH"
+else
+    run git remote add origin "$REPO_SSH"
+fi
+run git remote -v
 
 step "Push"
 run git push -u origin main
