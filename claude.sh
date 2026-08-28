@@ -73,26 +73,57 @@ fi
 step "Push"
 run git push -u origin main
 
+step "Wait for the workflows to register"
+# A freshly pushed workflow is not immediately dispatchable.
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if gh workflow view monthly-report.yml >/dev/null 2>&1; then
+        printf '   monthly-report.yml is registered\n'
+        break
+    fi
+    printf '   not registered yet (attempt %s/10), waiting 10s...\n' "$attempt"
+    sleep 10
+done
+
+step "Trigger the monthly report"
+# A manual dispatch skips the last-Thursday gate and defaults to this month.
+if gh workflow run monthly-report.yml; then
+    printf '   dispatched\n'
+    sleep 8
+    run_id="$(gh run list --workflow=monthly-report.yml --limit 1 \
+        --json databaseId --jq '.[0].databaseId' 2>/dev/null)"
+    if [ -n "${run_id:-}" ]; then
+        printf '   run: https://github.com/%s/actions/runs/%s\n' "$REPO_SLUG" "$run_id"
+        printf '\n   Watching (this takes a few minutes - Nix install, then the\n'
+        printf '   gatherer talks to every QGIS source, then the site build):\n\n'
+        gh run watch "$run_id" --exit-status || FAILED=1
+        printf '\n'
+        gh run view "$run_id" --log-failed 2>/dev/null | tail -40 || true
+    else
+        printf '!! Could not find the run id. Check: gh run list\n'
+        FAILED=1
+    fi
+else
+    FAILED=1
+    printf '!! Dispatch failed. The workflow may not be registered yet.\n'
+    printf '   Try again in a minute: gh workflow run monthly-report.yml\n'
+fi
+
 step "Enable GitHub Pages"
 if gh api "repos/$REPO_SLUG/pages" >/dev/null 2>&1; then
     printf '   Pages already enabled\n'
+elif git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+    run gh api -X POST "repos/$REPO_SLUG/pages" \
+        -f 'source[branch]=gh-pages' -f 'source[path]=/'
 else
-    printf '   Pages is not enabled yet.\n'
-    printf '   The gh-pages branch is created by the first Docs workflow run,\n'
-    printf '   so enable Pages after that run finishes:\n'
-    printf '     gh api -X POST repos/%s/pages \\\n' "$REPO_SLUG"
-    printf "       -f 'source[branch]=gh-pages' -f 'source[path]=/'\n"
-    printf '   or Settings > Pages > Deploy from a branch > gh-pages / (root)\n'
+    printf '!! gh-pages does not exist yet, so Pages cannot be enabled.\n'
+    printf '   That means the publish step did not run. Check the run log above.\n'
 fi
 
-step "Watch the docs build"
-printf '   gh run watch --exit-status\n'
-printf '   Site: https://timlinux.github.io/qgis-news-gatherer/\n'
-
-step "Trigger a report by hand (optional)"
-printf '   The schedule next fires on the last Thursday of the month.\n'
-printf '   To publish one now:\n'
-printf '     gh workflow run monthly-report.yml\n'
+step "Where to look"
+printf '   Site:    https://timlinux.github.io/qgis-news-gatherer/\n'
+printf '   Reports: https://timlinux.github.io/qgis-news-gatherer/reports/\n'
+printf '   Actions: https://github.com/%s/actions\n' "$REPO_SLUG"
+printf '\n   Pages can take a minute to serve after it is first enabled.\n'
 
 step "Summary"
 if [ "$FAILED" -eq 0 ]; then
