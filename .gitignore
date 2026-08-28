@@ -104,6 +104,10 @@ screenshot*.png
 *.zip
 *.tar.gz
 
+# MkDocs build output and the temporary gh-pages checkout
+site/
+.gh-pages/
+
 # direnv
 .direnv/
 

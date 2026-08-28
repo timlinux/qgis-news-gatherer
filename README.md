@@ -20,6 +20,15 @@ QGIS News Gatherer is a Python CLI tool that automates gathering content for the
 - **Configurable sections**: Choose which news sources to include
 - **Date filtering**: Automatically filters content to the target month
 
+## Documentation
+
+Full documentation, including the archive of published monthly reports, is at
+**<https://timlinux.github.io/qgis-news-gatherer/>**.
+
+- [Getting started](https://timlinux.github.io/qgis-news-gatherer/getting-started/)
+- [Monthly reports](https://timlinux.github.io/qgis-news-gatherer/reports/)
+- [Monthly automation](https://timlinux.github.io/qgis-news-gatherer/admin-guide/automation/)
+
 ## Data Sources
 
 | Source | Description |

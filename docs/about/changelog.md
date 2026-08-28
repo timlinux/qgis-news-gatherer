@@ -1,3 +1,7 @@
+<!-- SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com> -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Mirrored from the repository root by scripts/sync_root_docs.py. -->
+
 # Changelog
 
 All notable changes to this project are documented in this file.

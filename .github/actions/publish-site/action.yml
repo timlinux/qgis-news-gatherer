@@ -1,0 +1,74 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Publish documentation site
+description: >
+  Restore the published report archive from gh-pages, regenerate the archive
+  index, build the MkDocs site and deploy it. Shared by the docs and monthly
+  report workflows so the build lives in one place.
+
+inputs:
+  github-token:
+    description: Token used to push to the gh-pages branch
+    required: true
+  deploy:
+    description: Set to "false" to build without deploying
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install documentation tooling
+      shell: bash
+      run: python -m pip install --upgrade pip mkdocs-material
+
+    # continue-on-error: the branch does not exist before the first deploy.
+    - name: Fetch the published site
+      uses: actions/checkout@v4
+      continue-on-error: true
+      with:
+        ref: gh-pages
+        path: .gh-pages
+
+    - name: Restore the published report archive
+      shell: bash
+      run: |
+        mkdir -p docs/reports
+        if [ -d .gh-pages/reports ]; then
+          # -n so a report generated earlier in this run is not clobbered by
+          # the copy already on gh-pages.
+          cp -n .gh-pages/reports/qgis-news-*.pdf docs/reports/ 2>/dev/null || true
+        fi
+        rm -rf .gh-pages
+        echo "Reports available for this build:"
+        ls -la docs/reports/ || true
+
+    - name: Mirror the root documents into the site
+      shell: bash
+      run: python scripts/sync_root_docs.py
+
+    - name: Generate the report archive index
+      shell: bash
+      run: python scripts/generate_reports_index.py
+
+    - name: Build the site
+      shell: bash
+      run: mkdocs build --strict
+
+    - name: Deploy to GitHub Pages
+      if: inputs.deploy == 'true'
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ inputs.github-token }}
+        publish_dir: ./site
+        # The archive is the only irreplaceable thing on the branch, so keep
+        # existing files rather than risk wiping it on a partial build.
+        keep_files: true
+        user_name: github-actions[bot]
+        user_email: github-actions[bot]@users.noreply.github.com
+        commit_message: "docs: publish site"

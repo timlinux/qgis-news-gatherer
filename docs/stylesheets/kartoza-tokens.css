@@ -1,0 +1,36 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
+ * Kartoza brand tokens, extended with the QGIS palette. The site is a QGIS
+ * project site published by Kartoza, so QGIS green leads and the Kartoza
+ * tokens carry the neutrals, status colours and typography.
+ */
+:root {
+  /* QGIS */
+  --qgis-green: #589632;
+  --qgis-green-dark: #3d7a1c;
+  --qgis-green-light: #7db842;
+  --qgis-accent: #93b023;
+
+  /* Kartoza */
+  --kartoza-blue: #54a2cc;
+  --kartoza-amber: #eeb348;
+  --kartoza-grey: #8a8b8b;
+
+  --text-default: #383939;
+  --text-muted: #676869;
+  --rule-line: #d1d1d1;
+  --surface-cloud: #f5f5f2;
+  --surface-white: #ffffff;
+
+  --font-sans: 'Nunito', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --status-success: #3c7d54;
+  --status-success-tint: #eaf3ec;
+  --status-warn: #eeb348;
+  --status-warn-tint: #fcf3e0;
+  --status-error: #b0473c;
+  --status-error-tint: #fbefef;
+}

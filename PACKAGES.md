@@ -77,6 +77,23 @@ This document provides an annotated list of all packages in the software archite
 | `mkdocs-material` | >=9.5.0 | Material theme for MkDocs |
 | `mkdocstrings[python]` | >=0.24.0 | Auto-generate docs from docstrings |
 
+## Repository Layout
+
+```
+.
+├── src/qgis_news_gatherer/  # The package (see below)
+├── tests/                   # Test suite
+├── docs/                    # MkDocs documentation site
+├── scripts/                 # Site build helpers
+│   ├── generate_reports_index.py  # Builds the report archive page
+│   └── sync_root_docs.py          # Mirrors root markdown into the site
+├── .github/
+│   ├── actions/publish-site/      # Shared docs build and deploy
+│   └── workflows/                 # ci, docs, monthly-report
+├── mkdocs.yml               # Documentation site configuration
+└── flake.nix                # Reproducible dev environment
+```
+
 ## Module Structure
 
 ```

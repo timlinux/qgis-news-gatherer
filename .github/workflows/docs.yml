@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2026 Kartoza <info@kartoza.com>
+# SPDX-License-Identifier: GPL-3.0-or-later
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'scripts/generate_reports_index.py'
+      - '.github/actions/publish-site/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - 'scripts/generate_reports_index.py'
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: write
+
+# One writer to gh-pages at a time: the monthly report job publishes to the
+# same branch.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and publish the site
+        uses: ./.github/actions/publish-site
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Pull requests build to prove the docs compile, but do not deploy.
+          deploy: ${{ github.event_name != 'pull_request' }}

@@ -40,6 +40,10 @@
           jinja2
           pypdf
 
+          # Documentation
+          mkdocs
+          mkdocs-material
+
           # Development tools
           pytest
           pytest-asyncio
@@ -88,7 +92,8 @@
             echo "  nix run .#test         - Run tests"
             echo "  nix run .#lint         - Run linter"
             echo "  nix run .#format       - Format code"
-            echo "  nix run .#docs         - Build documentation"
+            echo "  nix run .#docs         - Build the documentation site"
+            echo "  nix run .#docs-serve   - Serve the docs with live reload"
             echo ""
             export PYTHONPATH="$PWD/src:$PYTHONPATH"
             export FONTCONFIG_FILE="${fontsConf}"
@@ -98,7 +103,7 @@
         packages = {
           default = pythonPackages.buildPythonApplication {
             pname = "qgis-news-gatherer";
-            version = "0.1.0";
+            version = "0.3.0";
             src = ./.;
             format = "pyproject";
 
@@ -190,7 +195,20 @@
           docs = {
             type = "app";
             program = toString (pkgs.writeShellScript "build-docs" ''
-              echo "Documentation build not yet configured"
+              cd "${srcDir}"
+              ${python}/bin/python scripts/sync_root_docs.py
+              ${python}/bin/python scripts/generate_reports_index.py
+              ${python}/bin/mkdocs build "$@"
+            '');
+          };
+
+          docs-serve = {
+            type = "app";
+            program = toString (pkgs.writeShellScript "serve-docs" ''
+              cd "${srcDir}"
+              ${python}/bin/python scripts/sync_root_docs.py
+              ${python}/bin/python scripts/generate_reports_index.py
+              ${python}/bin/mkdocs serve "$@"
             '');
           };
         };
