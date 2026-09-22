@@ -8,9 +8,10 @@ Generates inline SVG charts compatible with WeasyPrint (no JavaScript).
 Uses QGIS branding colors.
 """
 
+import calendar
 import math
+from datetime import date
 from typing import Any
-
 
 # QGIS brand palette
 COLORS = {
@@ -26,6 +27,17 @@ COLORS = {
     "bg_alt": "#f0f7e6",
     "border": "#dde8cc",
     "grid": "#e8e8e8",
+    # Extra hues used only by the year-at-a-glance timeline. Sampled from
+    # https://qgis.org/resources/roadmap/ so the slide matches the site's
+    # own roadmap styling: light card background, a muted pending-grey for
+    # the stepper line, a saturated "current" green for the today ribbon,
+    # plus two categories (funding, governance) the roadmap has no analog
+    # for, chosen to stay legible against that palette.
+    "timeline_card_bg": "#f4f7f9",
+    "timeline_pending": "#dbe5eb",
+    "timeline_ribbon": "#3a9800",
+    "timeline_funding": "#3f7cac",
+    "timeline_governance": "#b5651d",
 }
 
 BAR_PALETTE = [
@@ -780,3 +792,397 @@ def generate_analytics_charts(results: list[Any]) -> list[dict[str, str]]:
                     })
 
     return charts
+
+
+
+
+# --- YEAR-AT-A-GLANCE TIMELINE -------------------------------------------
+#
+# Styled after https://qgis.org/resources/roadmap/: three light "card"
+# panels (one per third of the year) each holding a straight stepper line,
+# a green-vs-pending-grey progress split at today's position, and a folded
+# ribbon flagging "today" - the same visual language the roadmap uses for
+# its release-phase steppers and "Current: x.y.z" ribbons.
+#
+# The QGIS project's calendar is grounded in publicly documented patterns
+# rather than any single year's exact schedule (several of these events -
+# notably the User Conference and FOSS4G - move around the calendar from
+# year to year). Sources used to place these markers:
+#   - Feature releases land roughly every 4 months (Feb / Jun / Oct), with
+#     one release per cycle designated the Long Term Release; see
+#     https://changelog.qgis.org/ and the QGIS 4.0/LTR roadmap posts on
+#     https://blog.qgis.org.
+#   - The grant programme call, discussion and award dates follow the
+#     yearly "QGIS Grants" blog series, e.g.
+#     https://blog.qgis.org/2026/03/16/qgis-grants-11-call-for-grant-proposals-2026/
+#     and the matching results post in May.
+#   - The AGM (budget approval, financial report, PSC elections) is held
+#     virtually in Nov/Dec each year; see
+#     https://www.qgis.org/community/foundation/annual_general_meetings/.
+#   - The QGIS budget year is the calendar year (see the annual budget/
+#     financial report PDFs under qgis.org/community/foundation/).
+#   - FOSS4G International and the QGIS User Conference dates are taken
+#     from their most recently announced editions and flagged as variable.
+_TIMELINE_REF_YEAR = 2025  # non-leap year, used only for day-of-year math
+
+_TIMELINE_CATEGORY_COLORS = {
+    "release": COLORS["primary"],
+    "conference": COLORS["gold"],
+    "funding": COLORS["timeline_funding"],
+    "governance": COLORS["timeline_governance"],
+}
+
+_TIMELINE_CATEGORY_LABELS = {
+    "release": "Feature release (incl. LTR)",
+    "conference": "Conference (UC / FOSS4G)",
+    "funding": "Funding & budget",
+    "governance": "AGM governance",
+}
+
+# (key, label, month, day, category, size, note, label_side)
+# size: "major" (ringed, larger) or "minor". label_side: -1 above, +1 below.
+_TIMELINE_EVENTS = [
+    ("budget_start", "Budget year starts", 1, 1, "funding", "minor", None, 1),
+    ("release_feb", "Feature release", 2, 15, "release", "minor", None, -1),
+    ("financial_report", "Financial report published", 3, 1, "funding",
+     "minor", None, 1),
+    ("grant_call", "Call for grant proposals opens", 3, 20, "funding", "minor", None, -1),
+    ("grant_awards", "Grant awards announced", 5, 18, "funding", "minor", None, -1),
+    ("uc", "QGIS User Conference", 6, 3, "conference", "major", "dates vary by year", 1),
+    ("release_jun", "Feature release", 6, 20, "release", "minor", None, -1),
+    ("foss4g", "FOSS4G International Conference", 8, 30, "conference", "major",
+     "dates vary by year", 1),
+    ("release_oct_ltr", "Feature release + LTR designation", 10, 15, "release",
+     "major", None, -1),
+    ("agm_matters", "AGM: call for matters arising", 10, 25, "governance", "minor", None, 1),
+    ("agm_discussion", "AGM: discussion period", 11, 5, "governance", "minor", None, -1),
+    ("agm_nominations", "AGM: PSC election nominations", 11, 15, "governance", "minor", None, 1),
+    ("agm_elections", "AGM: PSC elections", 11, 25, "governance", "minor", None, -1),
+    ("budget_end", "Budget year ends", 12, 31, "funding", "minor", None, 1),
+]
+
+# Months in which a feature release lands - bugfix/point releases for the
+# active branch are skipped in those months since the feature release
+# itself is the release event that month.
+_TIMELINE_BUGFIX_MONTHS = [1, 3, 4, 5, 7, 8, 9, 11, 12]
+_TIMELINE_BUGFIX_DAY = 8
+
+# Each card spans four months. Card boundaries are calendar-ordered (unlike
+# a meandering river, a roadmap-style stepper reads left-to-right on every
+# row) so "past" always means "earlier card, or earlier on this card's line".
+_TIMELINE_CARDS = [
+    {"heading": "JANUARY – APRIL", "start_month": 1, "end_month": 4},
+    {"heading": "MAY – AUGUST", "start_month": 5, "end_month": 8},
+    {"heading": "SEPTEMBER – DECEMBER", "start_month": 9, "end_month": 12},
+]
+
+
+def _timeline_doy(month: int, day: int) -> int:
+    """Day-of-year for (month, day) in the timeline's reference year."""
+    return date(_TIMELINE_REF_YEAR, month, day).timetuple().tm_yday
+
+
+def _timeline_last_friday(month: int) -> int:
+    """Day-of-month of the last Friday of the given month (reference year)."""
+    last_day = calendar.monthrange(_TIMELINE_REF_YEAR, month)[1]
+    d = date(_TIMELINE_REF_YEAR, month, last_day)
+    offset = (d.weekday() - 4) % 7  # Friday == 4
+    return d.day - offset
+
+
+def _timeline_card_layout(width: float, height: float) -> list[dict]:
+    """Compute pixel geometry for the three quarter cards.
+
+    Returns each card's rect, its stepper line's y and x-range, and its
+    day-of-year span, so callers can place ticks/dots/labels by date alone.
+    """
+    card_x = 24.0
+    card_w = width - 2 * card_x
+    card_gap = 16.0
+    bottom_reserved = 66.0  # legend row + caption
+    top_pad = 6.0
+    card_h = (height - top_pad - bottom_reserved - 2 * card_gap) / 3
+
+    cards = []
+    for i, spec in enumerate(_TIMELINE_CARDS):
+        card_y = top_pad + i * (card_h + card_gap)
+        start_doy = _timeline_doy(spec["start_month"], 1)
+        end_month = spec["end_month"]
+        end_day = calendar.monthrange(_TIMELINE_REF_YEAR, end_month)[1]
+        end_doy = _timeline_doy(end_month, end_day) + 1  # exclusive
+        cards.append({
+            **spec,
+            "x": card_x,
+            "y": card_y,
+            "w": card_w,
+            "h": card_h,
+            "line_y": card_y + 72,
+            "x0": card_x + 34,
+            "x1": card_x + card_w - 34,
+            "start_doy": start_doy,
+            "end_doy": end_doy,
+        })
+    return cards
+
+
+def _timeline_x_in_card(card: dict, doy: int) -> float:
+    """Map a day-of-year to an x position along a card's stepper line."""
+    span = card["end_doy"] - card["start_doy"]
+    t = (doy - card["start_doy"]) / span if span else 0.0
+    t = min(max(t, 0.0), 1.0)
+    return card["x0"] + t * (card["x1"] - card["x0"])
+
+
+def _timeline_card_for_doy(cards: list[dict], doy: int) -> int:
+    """Index of the card whose month range contains ``doy``."""
+    for i, card in enumerate(cards):
+        if doy < card["end_doy"] or i == len(cards) - 1:
+            return i
+    return len(cards) - 1
+
+
+def generate_year_timeline_svg(
+    current_date: date,
+    width: int = 1000,
+    height: int = 580,
+) -> str:
+    """Generate the "QGIS Year at a Glance" timeline as an inline SVG.
+
+    Plots the recurring annual cycle of QGIS project events (releases,
+    grants, the AGM cycle, budget year, conferences, and monthly Open
+    Days) as three stacked quarter-cards styled after the QGIS.org
+    roadmap page: a stepper line that turns from green (elapsed) to grey
+    (still ahead) at ``current_date``'s position, filled dots for events
+    already past and hollow dots for events still ahead, and a folded
+    ribbon flagging "today" on the current card.
+
+    Args:
+        current_date: The date to mark as "today" on the timeline.
+        width: SVG width.
+        height: SVG height.
+    """
+    cards = _timeline_card_layout(width, height)
+
+    # Map onto the (non-leap) reference year by month/day so Feb 29 in a
+    # leap year still lands sensibly on the timeline.
+    today_doy = _timeline_doy(
+        current_date.month,
+        min(current_date.day, calendar.monthrange(_TIMELINE_REF_YEAR, current_date.month)[1]),
+    )
+    today_card_index = _timeline_card_for_doy(cards, today_doy)
+
+    lines = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="0 0 {width} {height}" '
+        f'style="font-family: \'Segoe UI\', Tahoma, sans-serif;">',
+    ]
+
+    ribbon_green = COLORS["timeline_ribbon"]
+    pending_grey = COLORS["timeline_pending"]
+    progress_green = COLORS["primary"]
+
+    for card_index, card in enumerate(cards):
+        cx, cy, cw, ch = card["x"], card["y"], card["w"], card["h"]
+        line_y, x0, x1 = card["line_y"], card["x0"], card["x1"]
+
+        # Card panel
+        lines.append(
+            f'<rect x="{cx:.1f}" y="{cy:.1f}" width="{cw:.1f}" height="{ch:.1f}" '
+            f'rx="10" fill="{COLORS["timeline_card_bg"]}"/>'
+        )
+        lines.append(
+            f'<text x="{cx + 20:.1f}" y="{cy + 26:.1f}" '
+            f'font-size="12.5" font-weight="700" letter-spacing="0.5" '
+            f'fill="{COLORS["text"]}">{_escape(card["heading"])}</text>'
+        )
+
+        # Stepper line: green for elapsed days, pending-grey for the rest.
+        if card_index < today_card_index:
+            lines.append(
+                f'<line x1="{x0:.1f}" y1="{line_y:.1f}" x2="{x1:.1f}" y2="{line_y:.1f}" '
+                f'stroke="{progress_green}" stroke-width="3" stroke-linecap="round"/>'
+            )
+        elif card_index > today_card_index:
+            lines.append(
+                f'<line x1="{x0:.1f}" y1="{line_y:.1f}" x2="{x1:.1f}" y2="{line_y:.1f}" '
+                f'stroke="{pending_grey}" stroke-width="3" stroke-linecap="round"/>'
+            )
+        else:
+            tx = _timeline_x_in_card(card, today_doy)
+            lines.append(
+                f'<line x1="{x0:.1f}" y1="{line_y:.1f}" x2="{tx:.1f}" y2="{line_y:.1f}" '
+                f'stroke="{progress_green}" stroke-width="3" stroke-linecap="round"/>'
+            )
+            lines.append(
+                f'<line x1="{tx:.1f}" y1="{line_y:.1f}" x2="{x1:.1f}" y2="{line_y:.1f}" '
+                f'stroke="{pending_grey}" stroke-width="3" stroke-linecap="round"/>'
+            )
+            # Today tick: a small flag crossing the line at its exact spot.
+            lines.append(
+                f'<line x1="{tx:.1f}" y1="{line_y - 11:.1f}" x2="{tx:.1f}" y2="{line_y + 11:.1f}" '
+                f'stroke="{ribbon_green}" stroke-width="2.5"/>'
+            )
+            lines.append(
+                f'<circle cx="{tx:.1f}" cy="{line_y:.1f}" r="4.5" fill="{ribbon_green}" '
+                f'stroke="white" stroke-width="1.5"/>'
+            )
+
+        # Month tick marks + labels along the top of the line. The first
+        # month's label is skipped - the card heading already names it,
+        # and the two would otherwise collide.
+        for month in range(card["start_month"], card["end_month"] + 1):
+            mx = _timeline_x_in_card(card, _timeline_doy(month, 1))
+            lines.append(
+                f'<circle cx="{mx:.1f}" cy="{line_y:.1f}" r="2" fill="{COLORS["text_muted"]}"/>'
+            )
+            if month == card["start_month"]:
+                continue
+            lines.append(
+                f'<text x="{mx:.1f}" y="{line_y - 42:.1f}" text-anchor="middle" '
+                f'font-size="7.5" font-weight="600" letter-spacing="0.5" '
+                f'fill="{COLORS["text_muted"]}">'
+                f'{calendar.month_abbr[month].upper()}</text>'
+            )
+
+        # Recurring markers: QGIS Open Day (last Friday, monthly)
+        for month in range(card["start_month"], card["end_month"] + 1):
+            day = _timeline_last_friday(month)
+            ox = _timeline_x_in_card(card, _timeline_doy(month, day))
+            lines.append(
+                f'<circle cx="{ox:.1f}" cy="{line_y:.1f}" r="2.5" '
+                f'fill="{COLORS["primary_light"]}" opacity="0.7"/>'
+            )
+            if month == 1:
+                lines.append(
+                    f'<text x="{ox:.1f}" y="{line_y + 30:.1f}" text-anchor="middle" '
+                    f'font-size="6.5" font-style="italic" fill="{COLORS["text_muted"]}">'
+                    f'Open Day (last Fri, monthly)</text>'
+                )
+
+        # Recurring markers: bugfix/point releases
+        for month in range(card["start_month"], card["end_month"] + 1):
+            if month not in _TIMELINE_BUGFIX_MONTHS:
+                continue
+            bx = _timeline_x_in_card(card, _timeline_doy(month, _TIMELINE_BUGFIX_DAY))
+            lines.append(
+                f'<circle cx="{bx:.1f}" cy="{line_y:.1f}" r="2.5" '
+                f'fill="{COLORS["accent"]}" opacity="0.7"/>'
+            )
+            if month == 4:
+                lines.append(
+                    f'<text x="{bx:.1f}" y="{line_y - 30:.1f}" text-anchor="middle" '
+                    f'font-size="6.5" font-style="italic" fill="{COLORS["text_muted"]}">'
+                    f'Bugfix releases (~monthly)</text>'
+                )
+
+        # Named milestone events for this card's month range
+        for _key, label, month, day, category, size, note, side in _TIMELINE_EVENTS:
+            if not (card["start_month"] <= month <= card["end_month"]):
+                continue
+            doy = _timeline_doy(month, day)
+            ex = _timeline_x_in_card(card, doy)
+            color = _TIMELINE_CATEGORY_COLORS[category]
+            is_major = size == "major"
+            is_past = doy <= today_doy
+            r = 7 if is_major else 5.5
+
+            if is_major:
+                lines.append(
+                    f'<circle cx="{ex:.1f}" cy="{line_y:.1f}" r="{r + 3}" '
+                    f'fill="none" stroke="{color}" stroke-width="1.5" opacity="0.45"/>'
+                )
+            lines.append(
+                f'<circle cx="{ex:.1f}" cy="{line_y:.1f}" r="{r}" '
+                f'fill="{color if is_past else "white"}" stroke="{color}" '
+                f'stroke-width="{2.5 if is_major else 1.5}"/>'
+            )
+
+            leader_len = 20 if is_major else 15
+            label_y = line_y + side * leader_len
+            lines.append(
+                f'<line x1="{ex:.1f}" y1="{(line_y + side * r):.1f}" '
+                f'x2="{ex:.1f}" y2="{(label_y - side * 9):.1f}" '
+                f'stroke="{color}" stroke-width="1" opacity="0.5"/>'
+            )
+            font_size = 8.5 if is_major else 7.8
+            font_weight = "700" if is_major else "600"
+
+            # Keep long labels from overflowing the card near its left/right
+            # edge: switch anchoring instead of letting text run off the
+            # page (there's no clip-path, so overflow would just vanish
+            # past the SVG viewBox).
+            half_w = len(label) * font_size * 0.52
+            card_left, card_right = card["x"] + 8, card["x"] + card["w"] - 8
+            if ex - half_w < card_left:
+                anchor, text_x = "start", max(ex - r - 4, card_left)
+            elif ex + half_w > card_right:
+                anchor, text_x = "end", min(ex + r + 4, card_right)
+            else:
+                anchor, text_x = "middle", ex
+
+            lines.append(
+                f'<text x="{text_x:.1f}" y="{label_y:.1f}" text-anchor="{anchor}" '
+                f'font-size="{font_size}" font-weight="{font_weight}" '
+                f'fill="{COLORS["text"]}">{_escape(label)}</text>'
+            )
+            if note:
+                lines.append(
+                    f'<text x="{text_x:.1f}" y="{(label_y + side * 10):.1f}" '
+                    f'text-anchor="{anchor}" font-size="6.5" font-style="italic" '
+                    f'fill="{COLORS["text_muted"]}">{_escape(note)}</text>'
+                )
+
+    # "Today" ribbon on the current card, folded-corner style like the
+    # roadmap's "Current: x.y.z" banners.
+    today_card = cards[today_card_index]
+    ribbon_cx = today_card["x"] + today_card["w"] - 58
+    ribbon_cy = today_card["y"] + 26
+    ribbon_label = f"TODAY · {current_date.strftime('%-d %b %Y')}"
+    ribbon_w = 26 + len(ribbon_label) * 5.6
+    lines.append(f'<g transform="translate({ribbon_cx:.1f},{ribbon_cy:.1f}) rotate(-40)">')
+    lines.append(
+        f'<rect x="{-ribbon_w / 2:.1f}" y="-11" width="{ribbon_w:.1f}" height="22" '
+        f'fill="{ribbon_green}"/>'
+    )
+    lines.append(
+        f'<text x="0" y="4" text-anchor="middle" font-size="9.5" font-weight="700" '
+        f'fill="white">{_escape(ribbon_label)}</text>'
+    )
+    lines.append("</g>")
+
+    # Legend
+    legend_items = [
+        (_TIMELINE_CATEGORY_COLORS[cat], _TIMELINE_CATEGORY_LABELS[cat])
+        for cat in ("release", "conference", "funding", "governance")
+    ] + [
+        (COLORS["primary_light"], "Open Day (monthly)"),
+        (COLORS["accent"], "Bugfix release (recurring)"),
+        (ribbon_green, "Today"),
+    ]
+    legend_y = height - 34
+    legend_x = 40.0
+    for color, text in legend_items:
+        lines.append(
+            f'<circle cx="{legend_x:.1f}" cy="{legend_y:.1f}" r="5" fill="{color}"/>'
+        )
+        lines.append(
+            f'<text x="{legend_x + 11:.1f}" y="{legend_y + 3:.1f}" '
+            f'font-size="8" fill="{COLORS["text_light"]}">{_escape(text)}</text>'
+        )
+        legend_x += 18 + len(text) * 4.6 + 20
+    lines.append(
+        f'<text x="40" y="{legend_y + 20:.1f}" '
+        f'font-size="7.5" fill="{COLORS["text_muted"]}">'
+        f'● filled = already happened this year    ○ hollow = still ahead</text>'
+    )
+
+    # Caption
+    lines.append(
+        f'<text x="{width / 2}" y="{height - 4}" text-anchor="middle" '
+        f'font-size="7" font-style="italic" fill="{COLORS["text_muted"]}">'
+        f'Illustrative annual cycle based on recent years’ patterns — '
+        f'exact dates are announced each year at qgis.org</text>'
+    )
+
+    lines.append("</svg>")
+    return "\n".join(lines)

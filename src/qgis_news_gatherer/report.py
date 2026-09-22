@@ -17,9 +17,12 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
-from qgis_news_gatherer.charts import fmt_number, generate_analytics_charts
+from qgis_news_gatherer.charts import (
+    fmt_number,
+    generate_analytics_charts,
+    generate_year_timeline_svg,
+)
 from qgis_news_gatherer.collectors.base import CollectorResult, NewsItem
-
 
 # YouTube description template
 YOUTUBE_DESCRIPTION_TEMPLATE = """{{ month_str }} QGIS News Update!
@@ -807,6 +810,18 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
             margin: 2px 0 8px;
             font-style: italic;
         }
+
+        /* --- YEAR-AT-A-GLANCE TIMELINE --- */
+        .timeline-container {
+            width: 100%;
+            margin-top: 4px;
+        }
+
+        .timeline-container svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -842,7 +857,16 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- SLIDE 3: Highlights -->
+    <!-- SLIDE 3: Year at a Glance -->
+    <div class="slide slide-content">
+        <h2>QGIS Year at a Glance</h2>
+        <p class="section-intro">The annual rhythm of the QGIS project — releases, funding, governance and community events.</p>
+        <div class="timeline-container">
+            {{ year_timeline_svg }}
+        </div>
+    </div>
+
+    <!-- SLIDE 4: Highlights -->
     <div class="slide slide-content">
         <h2 id="section-highlights">Highlights</h2>
         <div class="summary-stats">
@@ -1790,6 +1814,8 @@ class ShowNotesGenerator:
         logo_data = self._load_logo()
         hero_bg_data = self._load_hero_bg() or ""
 
+        year_timeline_svg = generate_year_timeline_svg(date.today())
+
         template = Template(PDF_HTML_TEMPLATE)
         return template.render(
             month_str=month_str,
@@ -1806,6 +1832,7 @@ class ShowNotesGenerator:
             version=__version__,
             logo_data=logo_data,
             hero_bg_data=hero_bg_data,
+            year_timeline_svg=year_timeline_svg,
         )
 
     def generate_pdf(self, output_path: Path) -> None:

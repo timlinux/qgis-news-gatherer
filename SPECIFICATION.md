@@ -93,6 +93,9 @@ QGIS News Gatherer is a Python CLI tool that automates the collection of content
 - Professional styling with QGIS branding colors
 - Includes summary statistics
 - Includes video chapters
+- Includes a "Year at a Glance" timeline of the recurring QGIS annual cycle
+  (releases, funding, governance, community), with a marker for the current
+  date, placed right after the chapters slide
 - Includes all news items organized by section
 - Includes all links
 - Includes Kartoza footer
@@ -134,6 +137,17 @@ QGIS News Gatherer is a Python CLI tool that automates the collection of content
 - **FR-003.3**: Display formatted output in terminal
 - **FR-003.4**: Include section headers and item counts
 - **FR-003.5**: Include Kartoza footer with links
+- **FR-003.7**: Render a "Year at a Glance" annual timeline slide (three
+  quarter cards covering all 12 months, styled after the stepper/ribbon
+  look of qgis.org/resources/roadmap/) showing the QGIS project's
+  recurring cycle of releases, LTR designation, bugfix releases, budget
+  year, financial report, grant call/awards, Open Day, FOSS4G, the User
+  Conference, and the AGM cycle (matters arising, discussion, PSC
+  nominations, PSC elections) - with a green-vs-pending-grey progress line
+  and a folded ribbon marking the report's generation date. Event timing
+  is grounded in publicly documented QGIS patterns
+  (see `generate_year_timeline_svg` in `charts.py`) and flagged as
+  illustrative where dates vary year to year.
 - **FR-003.6**: Generate PDF with professional styling
 - **FR-003.7**: Generate YouTube description with chapters
 - **FR-003.8**: Generate HTML for web viewing

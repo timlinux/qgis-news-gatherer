@@ -8,6 +8,21 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-21
+
+### Added
+
+- "QGIS Year at a Glance" PDF slide, placed right after the chapters slide:
+  three quarter-cards covering all 12 months, styled after the stepper/
+  ribbon look of qgis.org/resources/roadmap/ (light card panels, a
+  green-vs-pending-grey progress line, filled dots for events already past
+  and hollow dots for events still ahead, and a folded ribbon flagging
+  "today"). Plots the project's recurring annual cycle (feature/LTR/bugfix
+  releases, budget year, financial report, grant call/awards, monthly Open
+  Day, FOSS4G, the User Conference, and the AGM cycle). Implemented as
+  `generate_year_timeline_svg()` in `charts.py`, grounded in publicly
+  documented QGIS scheduling patterns.
+
 ## [0.3.0] - 2026-08-28
 
 ### Added
@@ -73,6 +88,7 @@ and this project adheres to
 - YouTube search results were parsed at a fixed path that YouTube no longer
   populates, so the section had been silently empty.
 
-[Unreleased]: https://github.com/timlinux/qgis-news-gatherer/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/timlinux/qgis-news-gatherer/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/timlinux/qgis-news-gatherer/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/timlinux/qgis-news-gatherer/releases/tag/v0.3.0
 [0.2.0]: https://github.com/timlinux/qgis-news-gatherer/releases/tag/v0.2.0

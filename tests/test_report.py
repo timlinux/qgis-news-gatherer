@@ -207,6 +207,8 @@ class TestShowNotesGenerator:
         assert "Releases" in html
         assert "QGIS 3.40" in html
         assert "Kartoza" in html
+        assert "QGIS Year at a Glance" in html
+        assert "TODAY ·" in html
 
     def test_custom_chapter_timing(self) -> None:
         """Test setting custom section duration."""
