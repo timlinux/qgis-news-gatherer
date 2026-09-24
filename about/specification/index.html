@@ -2485,6 +2485,9 @@
 - Professional styling with QGIS branding colors
 - Includes summary statistics
 - Includes video chapters
+- Includes a "Year at a Glance" timeline of the recurring QGIS annual cycle
+  (releases, funding, governance, community), with a marker for the current
+  date, placed right after the chapters slide
 - Includes all news items organized by section
 - Includes all links
 - Includes Kartoza footer
@@ -2527,6 +2530,17 @@
 <li><strong>FR-003.3</strong>: Display formatted output in terminal</li>
 <li><strong>FR-003.4</strong>: Include section headers and item counts</li>
 <li><strong>FR-003.5</strong>: Include Kartoza footer with links</li>
+<li><strong>FR-003.7</strong>: Render a "Year at a Glance" annual timeline slide (three
+  quarter cards covering all 12 months, styled after the stepper/ribbon
+  look of qgis.org/resources/roadmap/) showing the QGIS project's
+  recurring cycle of releases, LTR designation, bugfix releases, budget
+  year, financial report, grant call/awards, Open Day, FOSS4G, the User
+  Conference, and the AGM cycle (matters arising, discussion, PSC
+  nominations, PSC elections) - with a green-vs-pending-grey progress line
+  and a folded ribbon marking the report's generation date. Event timing
+  is grounded in publicly documented QGIS patterns
+  (see <code>generate_year_timeline_svg</code> in <code>charts.py</code>) and flagged as
+  illustrative where dates vary year to year.</li>
 <li><strong>FR-003.6</strong>: Generate PDF with professional styling</li>
 <li><strong>FR-003.7</strong>: Generate YouTube description with chapters</li>
 <li><strong>FR-003.8</strong>: Generate HTML for web viewing</li>
