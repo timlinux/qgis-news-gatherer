@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "qgis-news-gatherer"
-version = "0.4.0"
+version = "0.5.0"
 description = "Automated content collection for QGIS monthly YouTube news segments"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
@@ -72,6 +72,9 @@ Issues = "https://github.com/kartoza/qgis-news-gatherer/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+qgis_news_gatherer = ["data/*.json"]
 
 [tool.ruff]
 line-length = 100

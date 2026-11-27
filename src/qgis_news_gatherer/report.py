@@ -18,11 +18,10 @@ from rich.panel import Panel
 from rich.table import Table
 
 from qgis_news_gatherer.charts import (
-    fmt_number,
     generate_analytics_charts,
     generate_year_timeline_svg,
 )
-from qgis_news_gatherer.collectors.base import CollectorResult, NewsItem
+from qgis_news_gatherer.collectors.base import CollectorResult
 
 # YouTube description template
 YOUTUBE_DESCRIPTION_TEMPLATE = """{{ month_str }} QGIS News Update!
@@ -374,46 +373,6 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
         }
 
         /* --- VIDEO / SHORTS CARDS --- */
-        .video-stats {
-            display: flex;
-            gap: 8px;
-            margin: 8px 0 12px;
-        }
-
-        .video-stat {
-            flex: 1;
-            background: #f0f7e6;
-            border: 1px solid #dde8cc;
-            border-radius: 6px;
-            padding: 8px 6px;
-            text-align: center;
-        }
-
-        .video-stat-number {
-            font-size: 15pt;
-            font-weight: 700;
-            color: #3d7a1c;
-            line-height: 1.1;
-        }
-
-        .video-stat-label {
-            font-size: 7.5pt;
-            color: #666;
-            margin-top: 2px;
-        }
-
-        .video-chart {
-            text-align: center;
-            margin: 0 auto 4px;
-        }
-
-        .video-chart svg {
-            width: auto;
-            max-width: 14.5cm;
-            max-height: 7.5cm;
-            height: auto;
-        }
-
         .video-grid {
             display: flex;
             flex-wrap: wrap;
@@ -900,26 +859,13 @@ PDF_HTML_TEMPLATE = """<!DOCTYPE html>
     {% for section in sections %}
     {% if section.news_items %}
     <div class="slide slide-content">
-        <h2 id="section-{{ section.title|lower|replace(' ', '-')|replace('&', '')|replace("'", '') }}">{{ section.title }} <span class="item-count">({{ section.news_items|length }} items)</span></h2>
+        <h2 id="section-{{ section.title|lower|replace(' ', '-')|replace('&', '')|replace("'", '') }}">{{ section.title }} <span class="item-count">({% if section.is_video %}top {{ section.news_items|length }} by views{% else %}{{ section.news_items|length }} items{% endif %})</span></h2>
 
         {% for warning in section.warnings %}
         <div class="warning">{{ warning }}</div>
         {% endfor %}
 
         {% if section.is_video %}
-        {% if section.stats %}
-        <div class="video-stats">
-            {% for stat in section.stats %}
-            <div class="video-stat">
-                <div class="video-stat-number">{{ stat.value }}</div>
-                <div class="video-stat-label">{{ stat.label }}</div>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-        {% for svg in section.chart_svgs %}
-        <div class="video-chart">{{ svg }}</div>
-        {% endfor %}
         <div class="video-grid">
             {% for item in section.news_items %}
             <div class="video-card{% if item.highlight %} video-card-featured{% endif %}">
@@ -1333,33 +1279,6 @@ class ShowNotesGenerator:
         text = re.sub(r"\s+", " ", text).strip()
         return text
 
-    @staticmethod
-    def _video_stats(summary: NewsItem | None) -> list[dict[str, str]]:
-        """Build the stat tiles shown above a YouTube section's cards."""
-        if summary is None:
-            return []
-
-        meta = summary.metadata
-        count = meta.get("count", 0)
-        noun = "Shorts" if meta.get("kind") == "Short" else "Videos"
-        stats = [
-            {"value": str(count), "label": f"{noun} this month"},
-            {"value": str(meta.get("tutorials", 0)), "label": "Tutorials"},
-            {
-                "value": fmt_number(meta.get("total_views", 0)),
-                "label": "Combined views",
-            },
-        ]
-
-        previous = meta.get("previous_count")
-        if previous is not None:
-            delta = count - previous
-            sign = "+" if delta > 0 else ""
-            stats.append(
-                {"value": f"{sign}{delta}", "label": f"vs last month ({previous})"}
-            )
-        return stats
-
     def _build_highlights(self) -> list[dict[str, str]]:
         """Extract top highlights from results for the summary box."""
         highlights = []
@@ -1566,8 +1485,6 @@ class ShowNotesGenerator:
             "plugin_stats",
             "sustaining_members",
             "user_groups",
-            "youtube",
-            "youtube_shorts",
         }
         video_sections = {"youtube", "youtube_shorts"}
 
@@ -1587,8 +1504,8 @@ class ShowNotesGenerator:
             "plugin_stats": 10,
             "psc_minutes": 15,
             "discourse": 1000,
-            "youtube": 8,
-            "youtube_shorts": 8,
+            "youtube": 10,
+            "youtube_shorts": 10,
         }
         default_limit = 5
 
@@ -1643,14 +1560,10 @@ class ShowNotesGenerator:
                     item for item in filtered_items
                     if item.category != "new_group"
                 ]
-            # The YouTube summary item drives the stat tiles and the chart,
-            # not a card of its own.
+            # The YouTube summary item is metadata-only bookkeeping (it
+            # drives the cross-month history file), not a card of its own.
             is_video = result.section_name in video_sections
-            video_summary = None
             if is_video:
-                for item in filtered_items:
-                    if item.metadata.get("metric") == "youtube_summary":
-                        video_summary = item
                 filtered_items = [
                     item for item in filtered_items
                     if item.metadata.get("metric") != "youtube_summary"
@@ -1705,7 +1618,6 @@ class ShowNotesGenerator:
                     "warnings": list(result.warnings) if result.warnings else [],
                     "news_items": items,
                     "is_video": is_video,
-                    "stats": self._video_stats(video_summary),
                     "is_qep": result.section_name in qep_sections,
                     "is_compact": result.section_name in compact_sections,
                     "is_member": is_member,

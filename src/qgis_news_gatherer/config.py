@@ -81,8 +81,9 @@ class Settings(BaseSettings):
 
     # Feed URLs
     qgis_blog_feed: str = Field(
-        default="https://blog.qgis.org/feed/",
-        description="QGIS blog RSS feed URL",
+        default="https://blog.qgis.org/index.xml",
+        description="QGIS blog RSS feed URL (Hugo's default feed path, since the"
+        " blog migrated off WordPress - the old /feed/ path now 404s)",
     )
     qgis_planet_feed: str = Field(
         default="https://plugins.qgis.org/planet/feed/atom/",
@@ -114,12 +115,12 @@ class Settings(BaseSettings):
         description="Search terms used to find QGIS Shorts",
     )
     youtube_max_videos: int = Field(
-        default=8,
-        description="Maximum long form videos to include in the report",
+        default=10,
+        description="Top N long form videos (by views) to include in the report",
     )
     youtube_max_shorts: int = Field(
-        default=8,
-        description="Maximum Shorts to include in the report",
+        default=10,
+        description="Top N Shorts (by views) to include in the report",
     )
     youtube_highlight_count: int = Field(
         default=3,

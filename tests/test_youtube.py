@@ -260,6 +260,34 @@ class TestYouTubeVideosCollector:
         assert "2026-08" in meta["history"]
 
     @pytest.mark.asyncio
+    async def test_summary_describes_only_the_shown_top_performers(
+        self, isolated_cache, monkeypatch
+    ) -> None:
+        """The summary counts the displayed top-N, not a claimed grand total.
+
+        A single page/query scrape can never see everything YouTube has for
+        a query, so the summary must not imply it counted "all" matches -
+        it describes exactly the top-by-views selection that is shown.
+        """
+        monkeypatch.setattr(settings, "youtube_max_videos", 2)
+        page = _search_page(
+            *(
+                _video_renderer(f"v{n}", f"QGIS video {n}", views=f"{n},000 views")
+                for n in range(1, 6)
+            )
+        )
+        collector = _collector(YouTubeVideosCollector, page)
+        result = await collector.collect()
+        await collector.close()
+
+        videos = [i for i in result.items if i.category == "Video"]
+        summary = next(i for i in result.items if i.category == "summary")
+
+        assert len(videos) == 2
+        assert summary.metadata["count"] == 2
+        assert "Top 2" in summary.title
+
+    @pytest.mark.asyncio
     async def test_previous_month_count_from_history(
         self, isolated_cache, monkeypatch
     ) -> None:

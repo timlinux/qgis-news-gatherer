@@ -1,0 +1,36 @@
+{
+  "reference_year": 2025,
+  "categories": {
+    "release": {"color": "primary", "label": "Feature release (incl. LTR)"},
+    "conference": {"color": "gold", "label": "Conference (UC / FOSS4G)"},
+    "funding": {"color": "timeline_funding", "label": "Funding & budget"},
+    "governance": {"color": "timeline_governance", "label": "AGM governance"},
+    "report": {"color": "accent", "label": "Annual report"}
+  },
+  "cards": [
+    {"heading": "JANUARY – APRIL", "start_month": 1, "end_month": 4},
+    {"heading": "MAY – AUGUST", "start_month": 5, "end_month": 8},
+    {"heading": "SEPTEMBER – DECEMBER", "start_month": 9, "end_month": 12}
+  ],
+  "bugfix_release": {
+    "months": [1, 3, 4, 5, 7, 8, 9, 11, 12],
+    "day": 8
+  },
+  "events": [
+    {"key": "annual_report", "label": "Annual report published", "month": 1, "day": 1, "category": "report", "size": "minor", "note": null, "label_side": -1},
+    {"key": "budget_start", "label": "Budget year starts", "month": 1, "day": 1, "category": "funding", "size": "minor", "note": null, "label_side": 1},
+    {"key": "release_feb", "label": "Feature release", "month": 2, "day": 15, "category": "release", "size": "minor", "note": null, "label_side": -1},
+    {"key": "financial_report", "label": "Financial report published", "month": 3, "day": 1, "category": "funding", "size": "minor", "note": null, "label_side": 1},
+    {"key": "grant_call", "label": "Call for grant proposals opens", "month": 3, "day": 20, "category": "funding", "size": "minor", "note": null, "label_side": -1},
+    {"key": "grant_awards", "label": "Grant awards announced", "month": 5, "day": 18, "category": "funding", "size": "minor", "note": null, "label_side": -1},
+    {"key": "uc", "label": "QGIS User Conference", "month": 10, "day": 3, "category": "conference", "size": "major", "note": "dates vary by year", "label_side": 1},
+    {"key": "release_jun", "label": "Feature release", "month": 6, "day": 20, "category": "release", "size": "minor", "note": null, "label_side": -1},
+    {"key": "foss4g", "label": "FOSS4G International Conference", "month": 9, "day": 30, "category": "conference", "size": "major", "note": "dates vary by year", "label_side": -1},
+    {"key": "release_oct_ltr", "label": "Feature release + LTR designation", "month": 10, "day": 15, "category": "release", "size": "major", "note": null, "label_side": -1},
+    {"key": "agm_matters", "label": "AGM: call for matters arising", "month": 10, "day": 25, "category": "governance", "size": "minor", "note": null, "label_side": 1},
+    {"key": "agm_discussion", "label": "AGM: discussion period", "month": 11, "day": 5, "category": "governance", "size": "minor", "note": null, "label_side": -1},
+    {"key": "agm_nominations", "label": "AGM: PSC election nominations", "month": 11, "day": 15, "category": "governance", "size": "minor", "note": null, "label_side": 1},
+    {"key": "agm_elections", "label": "AGM: PSC elections", "month": 11, "day": 25, "category": "governance", "size": "minor", "note": null, "label_side": -1},
+    {"key": "budget_end", "label": "Budget year ends", "month": 12, "day": 31, "category": "funding", "size": "minor", "note": null, "label_side": 1}
+  ]
+}

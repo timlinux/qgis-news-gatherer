@@ -9,8 +9,9 @@ Uses QGIS branding colors.
 """
 
 import calendar
-import math
+import json
 from datetime import date
+from importlib import resources
 from typing import Any
 
 # QGIS brand palette
@@ -452,128 +453,6 @@ def pie_chart(
     return "\n".join(lines)
 
 
-def grouped_bar_chart(
-    categories: list[str],
-    series: list[tuple[str, list[int | float]]],
-    title: str = "",
-    width: int = 520,
-    height: int = 240,
-    colors: list[str] | None = None,
-) -> str:
-    """Generate a vertical grouped bar chart as an SVG string.
-
-    Used for month-on-month comparisons where several counts share the same
-    x-axis (e.g. videos vs tutorials published each month).
-
-    Args:
-        categories: X-axis labels, in display order (e.g. months).
-        series: List of (series_name, values) tuples. Each values list must
-            be the same length as ``categories``.
-        title: Chart title.
-        width: SVG width.
-        height: SVG height.
-        colors: Bar colors per series; defaults to the QGIS bar palette.
-    """
-    series = [(name, values) for name, values in series if any(values)]
-    if not categories or not series:
-        return ""
-    if any(len(values) != len(categories) for _, values in series):
-        return ""
-
-    palette = colors or BAR_PALETTE
-    padding = {"top": 44 if title else 20, "right": 16, "bottom": 52, "left": 44}
-    chart_w = width - padding["left"] - padding["right"]
-    chart_h = height - padding["top"] - padding["bottom"]
-
-    max_val = max(max(values) for _, values in series)
-    if max_val <= 0:
-        max_val = 1
-    # Round the axis up to four whole steps: these are counts, so fractional
-    # grid labels ("2.3 videos") would read as noise. The head room also
-    # keeps the value label above the tallest bar from being clipped.
-    step = math.ceil(max_val / 4) if max_val > 4 else 1
-    while step * 4 <= max_val:
-        step += 1
-    max_val = step * 4
-
-    group_w = chart_w / len(categories)
-    group_pad = min(12.0, group_w * 0.18)
-    bar_w = max(4.0, (group_w - group_pad) / len(series))
-    baseline = padding["top"] + chart_h
-
-    lines = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" '
-        f'viewBox="0 0 {width} {height}" '
-        f'style="font-family: \'Segoe UI\', Tahoma, sans-serif; background: {COLORS["bg"]}; '
-        f'border: 1px solid {COLORS["border"]}; border-radius: 6px; margin: 8px 0;">',
-    ]
-
-    if title:
-        lines.append(
-            f'<text x="{width // 2}" y="28" text-anchor="middle" '
-            f'font-size="11" font-weight="600" fill="{COLORS["primary_dark"]}">'
-            f'{_escape(title)}</text>'
-        )
-
-    # Horizontal grid lines with value labels
-    for step in range(5):
-        frac = step / 4
-        grid_y = baseline - frac * chart_h
-        lines.append(
-            f'<line x1="{padding["left"]}" y1="{grid_y:.1f}" '
-            f'x2="{padding["left"] + chart_w}" y2="{grid_y:.1f}" '
-            f'stroke="{COLORS["grid"]}" stroke-width="1"/>'
-        )
-        lines.append(
-            f'<text x="{padding["left"] - 8}" y="{grid_y + 3:.1f}" '
-            f'text-anchor="end" font-size="7.5" fill="{COLORS["text_muted"]}">'
-            f'{_fmt_number(frac * max_val)}</text>'
-        )
-
-    # Bars
-    for group_index, category in enumerate(categories):
-        group_x = padding["left"] + group_index * group_w + group_pad / 2
-        for series_index, (_, values) in enumerate(series):
-            value = values[group_index]
-            bar_h = (value / max_val) * chart_h if value else 0
-            bar_x = group_x + series_index * bar_w
-            bar_y = baseline - bar_h
-            lines.append(
-                f'<rect x="{bar_x:.1f}" y="{bar_y:.1f}" '
-                f'width="{max(bar_w - 2, 2):.1f}" height="{max(bar_h, 1):.1f}" '
-                f'fill="{palette[series_index % len(palette)]}" rx="2"/>'
-            )
-            if value:
-                lines.append(
-                    f'<text x="{bar_x + (bar_w - 2) / 2:.1f}" y="{bar_y - 4:.1f}" '
-                    f'text-anchor="middle" font-size="7.5" font-weight="600" '
-                    f'fill="{COLORS["text"]}">{_fmt_number(value)}</text>'
-                )
-
-        lines.append(
-            f'<text x="{group_x + (group_w - group_pad) / 2:.1f}" '
-            f'y="{baseline + 14:.1f}" text-anchor="middle" font-size="8" '
-            f'fill="{COLORS["text_muted"]}">{_escape(category)}</text>'
-        )
-
-    # Legend
-    legend_y = height - 14
-    legend_x = padding["left"]
-    for series_index, (name, _) in enumerate(series):
-        lines.append(
-            f'<rect x="{legend_x:.1f}" y="{legend_y - 7}" width="9" height="9" '
-            f'fill="{palette[series_index % len(palette)]}" rx="2"/>'
-        )
-        lines.append(
-            f'<text x="{legend_x + 13:.1f}" y="{legend_y + 1}" font-size="8" '
-            f'fill="{COLORS["text_light"]}">{_escape(name)}</text>'
-        )
-        legend_x += 22 + len(name) * 5
-
-    lines.append("</svg>")
-    return "\n".join(lines)
-
-
 def _aggregate_platforms_by_os(data: dict[str, int]) -> dict[str, int]:
     """Roll per-version platform counts up into Windows / Mac / Linux+Other.
 
@@ -740,34 +619,6 @@ def generate_analytics_charts(results: list[Any]) -> list[dict[str, str]]:
                             ),
                         })
 
-        elif result.section_name in ("youtube", "youtube_shorts"):
-            for item in result.items:
-                meta = item.metadata or {}
-                if meta.get("metric") != "youtube_summary":
-                    continue
-
-                history = meta.get("history") or {}
-                count_key = meta.get("count_key", "videos")
-                tutorial_key = meta.get("tutorial_key", "tutorials")
-                # Last six recorded months, oldest first.
-                months = sorted(history)[-6:]
-                if not months:
-                    continue
-
-                counts = [int(history[m].get(count_key, 0)) for m in months]
-                tutorials = [int(history[m].get(tutorial_key, 0)) for m in months]
-                noun = "Shorts" if meta.get("kind") == "Short" else "Videos"
-                charts.append({
-                    "title": f"QGIS {noun} Per Month",
-                    "svg": grouped_bar_chart(
-                        months,
-                        [(noun, counts), ("Tutorials", tutorials)],
-                        title=f"QGIS {noun} Published Per Month",
-                        width=520,
-                        height=240,
-                    ),
-                })
-
         elif result.section_name == "user_groups":
             for item in result.items:
                 meta = item.metadata or {}
@@ -823,58 +674,46 @@ def generate_analytics_charts(results: list[Any]) -> list[dict[str, str]]:
 #     financial report PDFs under qgis.org/community/foundation/).
 #   - FOSS4G International and the QGIS User Conference dates are taken
 #     from their most recently announced editions and flagged as variable.
-_TIMELINE_REF_YEAR = 2025  # non-leap year, used only for day-of-year math
+def _load_timeline_data() -> dict:
+    """Load the year-at-a-glance timeline content from timeline.json.
+
+    Kept as editable data (rather than code) so the recurring annual
+    QGIS event calendar can be updated without touching chart logic.
+    """
+    raw = resources.files("qgis_news_gatherer.data").joinpath("timeline.json").read_text()
+    return json.loads(raw)
+
+
+_TIMELINE_DATA = _load_timeline_data()
+
+_TIMELINE_REF_YEAR = _TIMELINE_DATA["reference_year"]  # non-leap year, used only for day-of-year math
 
 _TIMELINE_CATEGORY_COLORS = {
-    "release": COLORS["primary"],
-    "conference": COLORS["gold"],
-    "funding": COLORS["timeline_funding"],
-    "governance": COLORS["timeline_governance"],
+    key: COLORS[spec["color"]] for key, spec in _TIMELINE_DATA["categories"].items()
 }
 
 _TIMELINE_CATEGORY_LABELS = {
-    "release": "Feature release (incl. LTR)",
-    "conference": "Conference (UC / FOSS4G)",
-    "funding": "Funding & budget",
-    "governance": "AGM governance",
+    key: spec["label"] for key, spec in _TIMELINE_DATA["categories"].items()
 }
 
 # (key, label, month, day, category, size, note, label_side)
 # size: "major" (ringed, larger) or "minor". label_side: -1 above, +1 below.
 _TIMELINE_EVENTS = [
-    ("budget_start", "Budget year starts", 1, 1, "funding", "minor", None, 1),
-    ("release_feb", "Feature release", 2, 15, "release", "minor", None, -1),
-    ("financial_report", "Financial report published", 3, 1, "funding",
-     "minor", None, 1),
-    ("grant_call", "Call for grant proposals opens", 3, 20, "funding", "minor", None, -1),
-    ("grant_awards", "Grant awards announced", 5, 18, "funding", "minor", None, -1),
-    ("uc", "QGIS User Conference", 6, 3, "conference", "major", "dates vary by year", 1),
-    ("release_jun", "Feature release", 6, 20, "release", "minor", None, -1),
-    ("foss4g", "FOSS4G International Conference", 8, 30, "conference", "major",
-     "dates vary by year", 1),
-    ("release_oct_ltr", "Feature release + LTR designation", 10, 15, "release",
-     "major", None, -1),
-    ("agm_matters", "AGM: call for matters arising", 10, 25, "governance", "minor", None, 1),
-    ("agm_discussion", "AGM: discussion period", 11, 5, "governance", "minor", None, -1),
-    ("agm_nominations", "AGM: PSC election nominations", 11, 15, "governance", "minor", None, 1),
-    ("agm_elections", "AGM: PSC elections", 11, 25, "governance", "minor", None, -1),
-    ("budget_end", "Budget year ends", 12, 31, "funding", "minor", None, 1),
+    (e["key"], e["label"], e["month"], e["day"], e["category"], e["size"], e["note"],
+     e["label_side"])
+    for e in _TIMELINE_DATA["events"]
 ]
 
 # Months in which a feature release lands - bugfix/point releases for the
 # active branch are skipped in those months since the feature release
 # itself is the release event that month.
-_TIMELINE_BUGFIX_MONTHS = [1, 3, 4, 5, 7, 8, 9, 11, 12]
-_TIMELINE_BUGFIX_DAY = 8
+_TIMELINE_BUGFIX_MONTHS = _TIMELINE_DATA["bugfix_release"]["months"]
+_TIMELINE_BUGFIX_DAY = _TIMELINE_DATA["bugfix_release"]["day"]
 
 # Each card spans four months. Card boundaries are calendar-ordered (unlike
 # a meandering river, a roadmap-style stepper reads left-to-right on every
 # row) so "past" always means "earlier card, or earlier on this card's line".
-_TIMELINE_CARDS = [
-    {"heading": "JANUARY – APRIL", "start_month": 1, "end_month": 4},
-    {"heading": "MAY – AUGUST", "start_month": 5, "end_month": 8},
-    {"heading": "SEPTEMBER – DECEMBER", "start_month": 9, "end_month": 12},
-]
+_TIMELINE_CARDS = _TIMELINE_DATA["cards"]
 
 
 def _timeline_doy(month: int, day: int) -> int:
@@ -941,6 +780,24 @@ def _timeline_card_for_doy(cards: list[dict], doy: int) -> int:
     return len(cards) - 1
 
 
+_TIMELINE_LABEL_WRAP_CHARS = 18
+
+
+def _wrap_timeline_label(label: str) -> list[str]:
+    """Wrap a long event label onto two lines, breaking at the nearest space
+    to the middle - two short lines take less horizontal room (and so
+    collide with neighboring events less) than one long one.
+    """
+    if len(label) <= _TIMELINE_LABEL_WRAP_CHARS:
+        return [label]
+    spaces = [i for i, ch in enumerate(label) if ch == " "]
+    if not spaces:
+        return [label]
+    mid = len(label) / 2
+    split = min(spaces, key=lambda i: abs(i - mid))
+    return [label[:split].rstrip(), label[split + 1 :].lstrip()]
+
+
 def generate_year_timeline_svg(
     current_date: date,
     width: int = 1000,
@@ -996,6 +853,15 @@ def generate_year_timeline_svg(
             f'fill="{COLORS["text"]}">{_escape(card["heading"])}</text>'
         )
 
+        # Month-division gridlines, drawn before everything else in this
+        # card so the stepper, dots, and labels all paint on top of them.
+        for month in range(card["start_month"], card["end_month"] + 1):
+            mx = _timeline_x_in_card(card, _timeline_doy(month, 1))
+            lines.append(
+                f'<line x1="{mx:.1f}" y1="{cy + 34:.1f}" x2="{mx:.1f}" y2="{cy + ch - 6:.1f}" '
+                f'stroke="{COLORS["grid"]}" stroke-width="1"/>'
+            )
+
         # Stepper line: green for elapsed days, pending-grey for the rest.
         if card_index < today_card_index:
             lines.append(
@@ -1026,6 +892,26 @@ def generate_year_timeline_svg(
                 f'<circle cx="{tx:.1f}" cy="{line_y:.1f}" r="4.5" fill="{ribbon_green}" '
                 f'stroke="white" stroke-width="1.5"/>'
             )
+
+            # "Today" ribbon, standing vertically at the tick. Drawn here -
+            # before this card's month/event labels below - so it sits
+            # behind them in paint order instead of covering them.
+            ribbon_label = f"TODAY · {current_date.strftime('%-d %b %Y')}"
+            ribbon_w = 26 + len(ribbon_label) * 5.6
+            ribbon_cx = min(
+                max(tx, card["x"] + 15),
+                card["x"] + card["w"] - 15,
+            )
+            lines.append(f'<g transform="translate({ribbon_cx:.1f},{line_y:.1f}) rotate(-90)">')
+            lines.append(
+                f'<rect x="{-ribbon_w / 2:.1f}" y="-11" width="{ribbon_w:.1f}" height="22" '
+                f'fill="{ribbon_green}"/>'
+            )
+            lines.append(
+                f'<text x="0" y="4" text-anchor="middle" font-size="9.5" font-weight="700" '
+                f'fill="white">{_escape(ribbon_label)}</text>'
+            )
+            lines.append("</g>")
 
         # Month tick marks + labels along the top of the line. The first
         # month's label is skipped - the card heading already names it,
@@ -1106,12 +992,14 @@ def generate_year_timeline_svg(
             )
             font_size = 8.5 if is_major else 7.8
             font_weight = "700" if is_major else "600"
+            line_height = font_size + 2.2
+            label_lines = _wrap_timeline_label(label)
 
             # Keep long labels from overflowing the card near its left/right
             # edge: switch anchoring instead of letting text run off the
             # page (there's no clip-path, so overflow would just vanish
             # past the SVG viewBox).
-            half_w = len(label) * font_size * 0.52
+            half_w = max(len(line) for line in label_lines) * font_size * 0.52
             card_left, card_right = card["x"] + 8, card["x"] + card["w"] - 8
             if ex - half_w < card_left:
                 anchor, text_x = "start", max(ex - r - 4, card_left)
@@ -1120,40 +1008,33 @@ def generate_year_timeline_svg(
             else:
                 anchor, text_x = "middle", ex
 
-            lines.append(
-                f'<text x="{text_x:.1f}" y="{label_y:.1f}" text-anchor="{anchor}" '
-                f'font-size="{font_size}" font-weight="{font_weight}" '
-                f'fill="{COLORS["text"]}">{_escape(label)}</text>'
-            )
-            if note:
+            # "Slot" 0 is the text position closest to the stepper line
+            # (label_y); each slot further out adds one line_height in the
+            # `side` direction. Below the line (side=+1), reading order
+            # already runs outward, so wrapped line j is slot j. Above the
+            # line (side=-1), reading order has to run the other way - the
+            # line read *first* belongs farthest out - so slot assignment
+            # reverses, otherwise a two-line label reads bottom-to-top.
+            num_lines = len(label_lines)
+            for line_index, line_text in enumerate(label_lines):
+                slot = line_index if side > 0 else (num_lines - 1 - line_index)
                 lines.append(
-                    f'<text x="{text_x:.1f}" y="{(label_y + side * 10):.1f}" '
+                    f'<text x="{text_x:.1f}" y="{(label_y + side * slot * line_height):.1f}" '
+                    f'text-anchor="{anchor}" font-size="{font_size}" font-weight="{font_weight}" '
+                    f'fill="{COLORS["text"]}">{_escape(line_text)}</text>'
+                )
+            if note:
+                note_y = label_y + side * num_lines * line_height
+                lines.append(
+                    f'<text x="{text_x:.1f}" y="{note_y:.1f}" '
                     f'text-anchor="{anchor}" font-size="6.5" font-style="italic" '
                     f'fill="{COLORS["text_muted"]}">{_escape(note)}</text>'
                 )
 
-    # "Today" ribbon on the current card, folded-corner style like the
-    # roadmap's "Current: x.y.z" banners.
-    today_card = cards[today_card_index]
-    ribbon_cx = today_card["x"] + today_card["w"] - 58
-    ribbon_cy = today_card["y"] + 26
-    ribbon_label = f"TODAY · {current_date.strftime('%-d %b %Y')}"
-    ribbon_w = 26 + len(ribbon_label) * 5.6
-    lines.append(f'<g transform="translate({ribbon_cx:.1f},{ribbon_cy:.1f}) rotate(-40)">')
-    lines.append(
-        f'<rect x="{-ribbon_w / 2:.1f}" y="-11" width="{ribbon_w:.1f}" height="22" '
-        f'fill="{ribbon_green}"/>'
-    )
-    lines.append(
-        f'<text x="0" y="4" text-anchor="middle" font-size="9.5" font-weight="700" '
-        f'fill="white">{_escape(ribbon_label)}</text>'
-    )
-    lines.append("</g>")
-
     # Legend
     legend_items = [
-        (_TIMELINE_CATEGORY_COLORS[cat], _TIMELINE_CATEGORY_LABELS[cat])
-        for cat in ("release", "conference", "funding", "governance")
+        (color, _TIMELINE_CATEGORY_LABELS[cat])
+        for cat, color in _TIMELINE_CATEGORY_COLORS.items()
     ] + [
         (COLORS["primary_light"], "Open Day (monthly)"),
         (COLORS["accent"], "Bugfix release (recurring)"),

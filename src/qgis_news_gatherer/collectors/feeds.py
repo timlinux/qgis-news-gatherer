@@ -5,11 +5,15 @@
 """RSS and JSON feed collectors."""
 
 from datetime import datetime
-from time import mktime
 
 import feedparser
 
-from qgis_news_gatherer.collectors.base import BaseCollector, CollectorResult, NewsItem
+from qgis_news_gatherer.collectors.base import (
+    BaseCollector,
+    CollectorResult,
+    NewsItem,
+    parse_feed_entry_date,
+)
 from qgis_news_gatherer.config import settings
 
 
@@ -34,12 +38,7 @@ class BlogFeedCollector(BaseCollector):
             warnings.append(f"Feed parsing warning: {feed.bozo_exception}")
 
         for entry in feed.entries:
-            # Parse publication date
-            pub_date = None
-            if hasattr(entry, "published_parsed") and entry.published_parsed:
-                pub_date = datetime.fromtimestamp(mktime(entry.published_parsed)).date()
-            elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
-                pub_date = datetime.fromtimestamp(mktime(entry.updated_parsed)).date()
+            pub_date = parse_feed_entry_date(entry)
 
             if self.is_in_month(pub_date):
                 # Extract author
@@ -159,11 +158,7 @@ class PlanetFeedCollector(BaseCollector):
             warnings.append(f"Feed parsing warning: {feed.bozo_exception}")
 
         for entry in feed.entries:
-            pub_date = None
-            if hasattr(entry, "published_parsed") and entry.published_parsed:
-                pub_date = datetime.fromtimestamp(mktime(entry.published_parsed)).date()
-            elif hasattr(entry, "updated_parsed") and entry.updated_parsed:
-                pub_date = datetime.fromtimestamp(mktime(entry.updated_parsed)).date()
+            pub_date = parse_feed_entry_date(entry)
 
             if self.is_in_month(pub_date):
                 author = None

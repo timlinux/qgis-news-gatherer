@@ -500,10 +500,13 @@ class _YouTubeSearchCollector(BaseCollector):
         )
 
     def _summary_item(self, items: list[NewsItem]) -> NewsItem:
-        """Build the infographic item for this section.
+        """Build the infographic item for this section's top performers.
 
-        Carries the counts for this month plus the recorded counts for
-        previous months, which :mod:`qgis_news_gatherer.charts` renders as a
+        ``items`` is already the top-by-views selection shown in the report
+        - the search only ever sees a page or two of YouTube's results, so a
+        "total found this month" figure would read as an exhaustive count it
+        isn't. Carries these counts plus the recorded counts for previous
+        months, which :mod:`qgis_news_gatherer.charts` renders as a
         month-on-month grouped bar chart.
         """
         month_key = self.config.target_month.strftime("%Y-%m")
@@ -525,9 +528,9 @@ class _YouTubeSearchCollector(BaseCollector):
         tutorial_noun = "tutorial" if tutorials == 1 else "tutorials"
 
         return NewsItem(
-            title=f"{len(items)} QGIS {noun} published this month",
+            title=f"Top {len(items)} QGIS {noun} by views this month",
             description=(
-                f"{len(items)} {noun} · {tutorials} {tutorial_noun} · "
+                f"Top {len(items)} {noun} · {tutorials} {tutorial_noun} · "
                 f"{total_views:,} views"
             ),
             category="summary",
@@ -577,7 +580,7 @@ class _YouTubeSearchCollector(BaseCollector):
         for index, item in enumerate(items):
             item.metadata["highlight"] = index < highlight_count
 
-        self.log_verbose(f"Found {len(items)} {self.kind.lower()} items")
+        self.log_verbose(f"Showing top {len(items)} {self.kind.lower()} items by views")
 
         return CollectorResult(
             section_name=self.section_name,

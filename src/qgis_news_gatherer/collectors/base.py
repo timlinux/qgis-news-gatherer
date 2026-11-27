@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import date as date_type
 from datetime import datetime
 from pathlib import Path
+from time import mktime
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -49,6 +50,26 @@ _EMOJI_RE = re.compile(
 def strip_emoji(text: str) -> str:
     """Remove pictographic/color emoji from a string."""
     return _EMOJI_RE.sub("", text)
+
+
+def parse_feed_entry_date(entry: Any) -> date_type | None:
+    """Read a feedparser entry's published/updated date, tolerating junk.
+
+    Some feeds emit a zero-value date for pages with no front-matter date
+    (e.g. Hugo renders a missing date as "Mon, 01 Jan 0001 00:00:00 +0000",
+    its zero `time.Time`) - a struct `time.mktime` cannot turn into a POSIX
+    timestamp on this platform. Treat any such entry as dateless rather than
+    letting it crash the whole collector.
+    """
+    for attr in ("published_parsed", "updated_parsed"):
+        parsed = getattr(entry, attr, None)
+        if not parsed:
+            continue
+        try:
+            return datetime.fromtimestamp(mktime(parsed)).date()
+        except (OverflowError, ValueError, OSError):
+            continue
+    return None
 
 
 @dataclass

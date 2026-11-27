@@ -5,11 +5,15 @@
 """Conference and event information collector."""
 
 import re
-from datetime import datetime
 
 from bs4 import BeautifulSoup
 
-from qgis_news_gatherer.collectors.base import BaseCollector, CollectorResult, NewsItem
+from qgis_news_gatherer.collectors.base import (
+    BaseCollector,
+    CollectorResult,
+    NewsItem,
+    parse_feed_entry_date,
+)
 from qgis_news_gatherer.config import settings
 
 
@@ -141,11 +145,7 @@ class ConferencesCollector(BaseCollector):
             summary = entry.get("summary", "").lower()
 
             if any(kw in title or kw in summary for kw in conference_keywords):
-                from time import mktime
-
-                pub_date = None
-                if hasattr(entry, "published_parsed") and entry.published_parsed:
-                    pub_date = datetime.fromtimestamp(mktime(entry.published_parsed)).date()
+                pub_date = parse_feed_entry_date(entry)
 
                 if self.is_in_month(pub_date):
                     items.append(
